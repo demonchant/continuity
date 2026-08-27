@@ -1,0 +1,77 @@
+services:
+  database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - continuity_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [private]
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file: ${CONTINUITY_ENV_FILE:-.env.production}
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?schema=public
+      SIBYL_MEMORY_DB: /data/sibyl/memory.db
+    volumes:
+      - continuity_sibyl:/data/sibyl
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "const port=process.env.PORT||3000;fetch('http://127.0.0.1:'+port+'/api/v1/readiness').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 6
+    expose: ['3000']
+    networks: [private, edge]
+
+  edge:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      CONTINUITY_DOMAIN: ${CONTINUITY_DOMAIN:?set CONTINUITY_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - continuity_caddy_data:/data
+      - continuity_caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [edge]
+
+networks:
+  private:
+    internal: true
+  edge:
+
+volumes:
+  continuity_postgres:
+  continuity_sibyl:
+  continuity_caddy_data:
+  continuity_caddy_config:

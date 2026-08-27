@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model BetaSignup {
+  id                       String   @id @default(uuid()) @db.Uuid
+  email                    String   @unique @db.VarChar(320)
+  role                     String   @db.VarChar(50)
+  workflow                 String?  @db.Text
+  consentToContact         Boolean
+  publicAttributionConsent Boolean  @default(false)
+  attributionName          String?  @db.VarChar(120)
+  createdAt                DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([createdAt])
+}
+
+enum MissionStatus {
+  CREATED
+  QUEUED
+  PLANNING
+  SELECTING_AGENT
+  EXECUTING
+  VERIFYING
+  COMPLETED
+  FAILED
+  RECOVERING
+  CANCELLED
+}
+
+model Mission {
+  id               String              @id @default(uuid()) @db.Uuid
+  objective        String              @db.Text
+  constraints      Json                @default("{}")
+  budget           Decimal             @db.Decimal(20, 8)
+  status           MissionStatus       @default(CREATED)
+  currentStep      String              @default("created") @db.VarChar(100)
+  transitions      MissionTransition[]
+  checkpoint       MissionCheckpoint?
+  actions          RecoveryAction[]
+  virtualsJobs     VirtualsJob[]
+  baseTransactions BaseTransaction[]
+  recoveryAudits   MissionRecoveryAudit[]
+  recoveryState    String?             @db.VarChar(100)
+  lastHeartbeat    DateTime?           @db.Timestamptz(3)
+  lastReconciliation DateTime?         @db.Timestamptz(3)
+  recoveryFailureReason String?         @db.VarChar(1000)
+  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @db.Timestamptz(3)
+
+  @@index([status, updatedAt])
+  @@index([createdAt, id])
+}
+
+model MissionRecoveryAudit {
+  id          String   @id @default(uuid()) @db.Uuid
+  missionId   String   @db.Uuid
+  mission     Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  workerId    String   @db.VarChar(200)
+  action      String   @db.VarChar(200)
+  status      String   @db.VarChar(50)
+  attempt     Int
+  details     Json     @default("{}")
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([missionId, createdAt])
+  @@index([status, createdAt])
+}
+
+model MissionWorkerLease {
+  id        String   @id @db.VarChar(100)
+  ownerId   String   @db.VarChar(200)
+  expiresAt DateTime @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+}
+
+enum BaseTransactionStatus {
+  INTENDED
+  SUBMITTED
+  CONFIRMED
+  FAILED
+  UNCERTAIN
+}
+
+model BaseTransaction {
+  id              String                @id @default(uuid()) @db.Uuid
+  missionId       String                @db.Uuid
+  mission         Mission               @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  actionId        String                @db.VarChar(200)
+  paymentId       String                @unique @db.VarChar(200)
+  agentId         String                @db.VarChar(300)
+  transactionHash String?               @unique @db.VarChar(66)
+  network         String                @db.VarChar(50)
+  chainId         Int
+  action          String                @db.VarChar(100)
+  verificationId  String?               @db.VarChar(200)
+  recipient       String                @db.VarChar(42)
+  amount          Decimal               @db.Decimal(36, 18)
+  asset           String                @db.VarChar(20)
+  status          BaseTransactionStatus @default(INTENDED)
+  blockNumber     BigInt?
+  confirmations   Int?
+  explorerUrl     String?               @db.VarChar(500)
+  memoryRecordId  String?               @db.VarChar(200)
+  sibylRecordId   String?               @db.VarChar(200)
+  sibylEventId    String?               @db.VarChar(200)
+  errorCode       String?               @db.VarChar(100)
+  errorMessage    String?               @db.VarChar(500)
+  createdAt       DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime              @updatedAt @db.Timestamptz(3)
+  confirmedAt     DateTime?             @db.Timestamptz(3)
+
+  @@unique([missionId, actionId])
+  @@index([missionId, status, updatedAt])
+  @@index([missionId, createdAt])
+  @@index([verificationId])
+}
+
+enum VirtualsJobState {
+  CREATED
+  OPEN
+  BUDGET_PROPOSED
+  FUNDED
+  SUBMITTED
+  COMPLETED
+  REJECTED
+  EXPIRED
+  UNCERTAIN
+  FAILED
+}
+
+model VirtualsJob {
+  id              String           @id @default(uuid()) @db.Uuid
+  missionId       String           @db.Uuid
+  mission         Mission          @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  actionId        String           @db.VarChar(200)
+  externalJobId   String           @db.VarChar(100)
+  chainId         Int
+  agentId         String           @db.VarChar(300)
+  providerAddress String           @db.VarChar(200)
+  offeringName    String           @db.VarChar(300)
+  state           VirtualsJobState @default(CREATED)
+  requirement     Json
+  result          Json?
+    verification    Json?
+    lifecycle       Json?
+  errorCode       String?          @db.VarChar(100)
+  errorMessage    String?          @db.VarChar(500)
+  createdAt       DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @db.Timestamptz(3)
+  completedAt     DateTime?        @db.Timestamptz(3)
+
+  @@unique([missionId, actionId])
+  @@unique([chainId, externalJobId])
+  @@index([missionId, state, updatedAt])
+  @@index([missionId, createdAt])
+  }
+
+enum RecoveryActionStatus {
+  INTENDED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  UNCERTAIN
+}
+
+model MissionCheckpoint {
+  missionId         String        @id @db.Uuid
+  mission           Mission       @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  missionState      MissionStatus
+  currentStep       String        @db.VarChar(100)
+  selectedAgentId   String?       @db.VarChar(200)
+  actionState       Json
+  paymentState      Json
+  verificationState Json
+  recoveryInfo      Json
+  nextAction        String        @db.VarChar(200)
+  version           Int           @default(1)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([missionState, updatedAt])
+}
+
+model RecoveryAction {
+  id                String               @id @default(uuid()) @db.Uuid
+  missionId         String               @db.Uuid
+  mission           Mission              @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  actionId          String               @db.VarChar(200)
+  paymentId         String?              @unique @db.VarChar(200)
+  kind              String               @db.VarChar(100)
+  status            RecoveryActionStatus @default(INTENDED)
+  attempts          Int                  @default(0)
+  providerReference String?              @db.VarChar(500)
+  receipt           Json?
+  failureReason     String?              @db.VarChar(1000)
+  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime             @updatedAt @db.Timestamptz(3)
+  completedAt       DateTime?            @db.Timestamptz(3)
+
+  @@unique([missionId, actionId])
+  @@index([missionId, status, updatedAt])
+  @@index([missionId, createdAt])
+}
+
+model MissionTransition {
+  id         String         @id @default(uuid()) @db.Uuid
+  missionId  String         @db.Uuid
+  mission    Mission        @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  fromStatus MissionStatus?
+  toStatus   MissionStatus
+  reason     String?        @db.VarChar(500)
+  createdAt  DateTime       @default(now()) @db.Timestamptz(3)
+
+  @@index([missionId, createdAt])
+}

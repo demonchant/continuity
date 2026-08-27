@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Continuity gives autonomous-agent systems durable operational memory: what worked, what failed, and what to do next."
+    />
+    <title>Continuity — Memory for autonomous agent operations</title>
+    <link rel="stylesheet" href="/continuity-site/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Continuity home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>CONTINUITY</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#problem">Problem</a>
+        <a href="#demo">Demo</a>
+        <a class="nav-cta" href="#beta">Join private beta</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Operational memory for autonomous agents</p>
+          <h1>Continuity remembers what worked, what failed, and what to do next.</h1>
+          <p class="hero-lede">
+            Give multi-agent systems experience they can actually use. Continuity recalls comparable
+            outcomes before selecting an agent, verifies the result, and carries useful evidence
+            into the next mission.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#beta">Request private beta access</a>
+            <a class="button secondary" href="/dashboard/judge">Open the product trace</a>
+          </div>
+          <p class="audience-note">
+            Built for AI agent developers, autonomous-agent builders, and teams operating
+            multi-agent workflows.
+          </p>
+        </div>
+
+        <div class="trace-window" aria-label="Continuity decision trace illustration">
+          <div class="trace-head">
+            <span>MISSION TRACE</span><span class="trace-live">MEMORY ACTIVE</span>
+          </div>
+          <ol class="trace-list">
+            <li>
+              <span>01</span>
+              <div><small>MISSION</small><strong>Verify a research result</strong></div>
+            </li>
+            <li class="memory">
+              <span>02</span>
+              <div>
+                <small>MEMORY RECALLED</small><strong>Comparable failures and successes</strong>
+              </div>
+            </li>
+            <li>
+              <span>03</span>
+              <div><small>DECISION</small><strong>Agent selected with cited evidence</strong></div>
+            </li>
+            <li>
+              <span>04</span>
+              <div>
+                <small>VERIFICATION</small><strong>Requirements checked before success</strong>
+              </div>
+            </li>
+            <li class="memory">
+              <span>05</span>
+              <div>
+                <small>MEMORY UPDATED</small><strong>Outcome becomes future experience</strong>
+              </div>
+            </li>
+          </ol>
+          <p class="trace-caption">
+            Product flow illustration — not user data or a fabricated run.
+          </p>
+        </div>
+      </section>
+
+      <section id="problem" class="section problem-section">
+        <div>
+          <p class="eyebrow">The problem</p>
+          <h2>Most agent systems restart their judgment on every mission.</h2>
+        </div>
+        <div class="problem-grid">
+          <article>
+            <span>01</span>
+            <h3>Failures disappear into logs</h3>
+            <p>A failed verification rarely changes which agent gets the next comparable task.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>Selection stays static</h3>
+            <p>Capability tags and price do not capture reliability on a specific kind of work.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>Retries repeat expensive mistakes</h3>
+            <p>
+              Without durable checkpoints and idempotency, recovery can duplicate actions and cost.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section product-section">
+        <div class="product-copy">
+          <p class="eyebrow">The product</p>
+          <h2>A memory-driven control layer for agent operations.</h2>
+          <p>
+            Continuity sits between a mission and its execution. It combines available agents with
+            relevant historical experience, produces an explainable choice, verifies the outcome,
+            and records what the system should learn.
+          </p>
+        </div>
+        <div class="product-points">
+          <div>
+            <strong>Recall before selection</strong
+            ><span>Relevant experience enters the decision, not a log archive.</span>
+          </div>
+          <div>
+            <strong>Explain the choice</strong
+            ><span>See the evidence, confidence, alternatives, and memory references.</span>
+          </div>
+          <div>
+            <strong>Verify before learning</strong
+            ><span
+              >An agent response is checked against the mission before success is recorded.</span
+            >
+          </div>
+          <div>
+            <strong>Recover safely</strong
+            ><span
+              >Durable checkpoints recognize completed work and prevent repeated side effects.</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <section id="demo" class="section demo-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Short demo</p>
+            <h2>One failure changes the next decision.</h2>
+          </div>
+          <a class="text-link" href="/dashboard/judge">Inspect real backend data in Judge Mode →</a>
+        </div>
+        <div class="demo-flow" aria-label="Memory-driven decision flow">
+          <article>
+            <small>SESSION A</small><strong>Agent result fails verification</strong>
+            <p>The failure and its reason are written to durable memory.</p>
+          </article>
+          <span aria-hidden="true">→</span>
+          <article class="highlight">
+            <small>NEXT MISSION</small><strong>Comparable experience is recalled</strong>
+            <p>The failed agent is penalized using cited historical evidence.</p>
+          </article>
+          <span aria-hidden="true">→</span>
+          <article>
+            <small>DECISION</small><strong>A more reliable agent is selected</strong>
+            <p>The explanation shows exactly how memory affected the choice.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="beta" class="section beta-section">
+        <div class="beta-copy">
+          <p class="eyebrow">Private beta</p>
+          <h2>Does your agent stack keep repeating the same mistakes?</h2>
+          <p>
+            We are speaking with builders who select, verify, retry, or pay agents in
+            production-like workflows. Request access or tell us how you handle operational memory
+            today.
+          </p>
+          <ul>
+            <li>No invented customer roster or inflated waitlist.</li>
+            <li>Your details are used only to discuss the beta.</li>
+            <li>Public attribution is always separate and optional.</li>
+          </ul>
+        </div>
+        <form id="beta-form" class="beta-form" novalidate>
+          <div class="field">
+            <label for="email">Work email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              maxlength="320"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="role">I am building</label>
+            <select id="role" name="role" required>
+              <option value="">Select one</option>
+              <option value="AGENT_DEVELOPER">AI agent applications</option>
+              <option value="AUTONOMOUS_AGENT_BUILDER">Autonomous-agent infrastructure</option>
+              <option value="MULTI_AGENT_TEAM">Multi-agent workflows</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="workflow"
+              >Where does your system lose useful experience? <span>Optional</span></label
+            >
+            <textarea id="workflow" name="workflow" rows="4" maxlength="1000"></textarea>
+          </div>
+          <div class="honeypot" aria-hidden="true">
+            <label for="company-website">Company website</label>
+            <input
+              id="company-website"
+              name="companyWebsite"
+              type="text"
+              tabindex="-1"
+              autocomplete="off"
+            />
+          </div>
+          <label class="check">
+            <input name="consentToContact" type="checkbox" required />
+            <span>You may contact me about research and private beta access.</span>
+          </label>
+          <details class="attribution-details">
+            <summary>Optional public attribution permission</summary>
+            <label class="check">
+              <input id="attribution-consent" name="publicAttributionConsent" type="checkbox" />
+              <span
+                >You may publicly attribute feedback I later approve. This does not grant blanket
+                permission to quote this submission.</span
+              >
+            </label>
+            <div id="attribution-field" class="field" hidden>
+              <label for="attribution-name">Attribution name</label>
+              <input id="attribution-name" name="attributionName" type="text" maxlength="120" />
+            </div>
+          </details>
+          <button class="button primary submit" type="submit">Request access</button>
+          <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+
+    <footer>
+      <a class="brand" href="/" aria-label="Continuity home"><span>CONTINUITY</span></a>
+      <p>Memory-driven operations for autonomous agents.</p>
+      <a href="/dashboard">Product dashboard</a>
+    </footer>
+    <script type="module" src="/continuity-site/app.js"></script>
+  </body>
+</html>

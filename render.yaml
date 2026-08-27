@@ -1,0 +1,101 @@
+services:
+  - type: web
+    name: continuity
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    numInstances: 1
+    dockerContext: .
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /api/v1/readiness
+    maxShutdownDelaySeconds: 60
+    disk:
+      name: continuity-sibyl
+      mountPath: /data/sibyl
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: continuity-postgres
+          property: connectionString
+      - key: LOG_LEVEL
+        value: info
+      - key: CONTINUITY_OPERATOR_TOKEN
+        generateValue: true
+      - key: CORS_ALLOWED_ORIGINS
+        value: ''
+      - key: RATE_LIMIT_WINDOW_MS
+        value: '60000'
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: '120'
+      - key: MEMORY_ENABLED
+        value: 'true'
+      - key: SIBYL_MCP_COMMAND
+        value: sibyl-memory-mcp
+      - key: SIBYL_MEMORY_DB
+        value: /data/sibyl/memory.db
+      - key: SIBYL_CALL_TIMEOUT_MS
+        value: '30000'
+      - key: VIRTUALS_ENABLED
+        value: 'true'
+      - key: VIRTUALS_WALLET_ADDRESS
+        sync: false
+      - key: VIRTUALS_WALLET_ID
+        sync: false
+      - key: VIRTUALS_SIGNER_PRIVATE_KEY
+        sync: false
+      - key: VIRTUALS_OPERATOR_TOKEN
+        sync: false
+      - key: VIRTUALS_BUILDER_CODE
+        sync: false
+      - key: VIRTUALS_CHAIN_ID
+        value: '8453'
+      - key: VIRTUALS_MAX_JOB_USDC
+        value: '1'
+      - key: VIRTUALS_POLL_INTERVAL_MS
+        value: '5000'
+      - key: VIRTUALS_JOB_TIMEOUT_MS
+        value: '900000'
+      - key: BASE_ENABLED
+        value: 'true'
+      - key: BASE_NETWORK
+        value: base-sepolia
+      - key: BASE_CHAIN_ID
+        value: '84532'
+      - key: BASE_RPC_URL
+        sync: false
+      - key: BASE_PRIVATE_KEY
+        sync: false
+      - key: BASE_PAYMENT_RECIPIENT
+        sync: false
+      - key: BASE_OPERATOR_TOKEN
+        generateValue: true
+      - key: BASE_PAYMENT_ASSET
+        value: ETH
+      - key: BASE_MAX_PAYMENT_AMOUNT
+        value: '0.001'
+      - key: BASE_CONFIRMATIONS
+        value: '1'
+      - key: BASE_ALLOW_MAINNET
+        value: 'false'
+      - key: RUNNER_MAX_RETRIES
+        value: '2'
+      - key: RUNNER_TIMEOUT_MS
+        value: '900000'
+      - key: RUNNER_FAILURE_THRESHOLD
+        value: '3'
+      - key: RUNNER_CANDIDATE_LIMIT
+        value: '10'
+      - key: SHUTDOWN_TIMEOUT_MS
+        value: '55000'
+
+databases:
+  - name: continuity-postgres
+    plan: basic-256mb
+    region: frankfurt
+    postgresMajorVersion: '16'
+    databaseName: continuity
+    user: continuity
+    ipAllowList: []

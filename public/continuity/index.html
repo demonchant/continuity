@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Continuity autonomous mission operations and Sibyl memory dashboard"
+    />
+    <title>Continuity — Autonomous Operations</title>
+    <link rel="stylesheet" href="/continuity-ui/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <a class="brand" href="/dashboard" aria-label="Continuity dashboard">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span><strong>CONTINUITY</strong><small>OPERATIONS MEMORY</small></span>
+        </a>
+        <nav class="nav-list">
+          <a data-nav="overview" href="/dashboard"><span aria-hidden="true">⌂</span>Overview</a>
+          <a data-nav="missions" href="/dashboard/missions"
+            ><span aria-hidden="true">◇</span>Missions</a
+          >
+          <a data-nav="agents" href="/dashboard/agents"
+            ><span aria-hidden="true">◎</span>Agent experience</a
+          >
+          <a data-nav="memory" href="/dashboard/memory"
+            ><span aria-hidden="true">◫</span>Memory explorer</a
+          >
+          <a data-nav="activity" href="/dashboard/activity"
+            ><span aria-hidden="true">↯</span>Activity</a
+          >
+          <a data-nav="judge" href="/dashboard/judge"
+            ><span aria-hidden="true">◆</span>Judge mode</a
+          >
+        </nav>
+        <div class="sidebar-foot">
+          <span class="live-dot" aria-hidden="true"></span>
+          <div><strong>System observer</strong><small>Read-only · secrets redacted</small></div>
+        </div>
+      </aside>
+      <section class="workspace">
+        <header class="topbar">
+          <button
+            class="menu-button"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+          >
+            ☰
+          </button>
+          <div class="environment"><span></span>Autonomous operations</div>
+          <div class="topbar-meta">
+            <span id="last-updated">Awaiting telemetry</span
+            ><button
+              id="refresh-button"
+              class="icon-button"
+              type="button"
+              aria-label="Refresh dashboard"
+            >
+              ↻
+            </button>
+          </div>
+        </header>
+        <main id="main-content" tabindex="-1">
+          <div id="app" aria-live="polite" aria-busy="true"></div>
+        </main>
+      </section>
+    </div>
+    <script type="module" src="/continuity-ui/app.js"></script>
+  </body>
+</html>

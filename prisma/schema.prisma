@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MissionStatus {
+  CREATED
+  PLANNING
+  EXECUTING
+  WAITING
+  VERIFYING
+  RECOVERING
+  FAILED
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id          String    @id @default(uuid()) @db.Uuid
+  email       String    @unique @db.VarChar(320)
+  displayName String?   @db.VarChar(120)
+  missions    Mission[]
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([createdAt])
+}
+
+model Mission {
+  id          String        @id @default(uuid()) @db.Uuid
+  ownerId     String        @db.Uuid
+  owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title       String        @db.VarChar(200)
+  objective   String        @db.Text
+  status      MissionStatus @default(CREATED)
+  budget      Decimal?      @db.Decimal(20, 8)
+  currency    String?       @db.VarChar(16)
+  currentStep Int           @default(0)
+  nextAction  String?       @db.Text
+  constraints Json?
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, status])
+  @@index([status, updatedAt])
+}

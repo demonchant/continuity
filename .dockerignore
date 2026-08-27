@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+node_modules
+backend/node_modules
+dist
+backend/dist
+coverage
+backend/coverage
+.continuity-demo
+.sibyl-demo-venv
+.tmp-playwright
+.tmp-playwright-*.png
+*.log
+PHASE17_FINAL_REPORT.md

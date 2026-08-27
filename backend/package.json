@@ -1,0 +1,67 @@
+{
+  "name": "@continuity/backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend foundation for the Continuity agent experience layer.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "packageManager": "npm@11.16.0",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:memory-gate": "vitest run tests/integration/load-bearing-memory-gate.test.ts",
+    "demo:sibyl-proof": "npm run build && node scripts/fresh-session-recall-demo.mjs",
+    "test:watch": "vitest",
+    "sibyl:smoke": "npm run build && node scripts/sibyl-cross-process-smoke.mjs",
+    "virtuals:smoke": "node scripts/virtuals-live-smoke.mjs",
+    "base:smoke": "node scripts/base-live-smoke.mjs",
+    "economic:smoke": "node scripts/economic-live-smoke.mjs",
+    "runner:smoke": "node scripts/mission-runner-live-smoke.mjs",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@prisma/client": "6.12.0",
+    "@virtuals-protocol/acp-node-v2": "0.1.12",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "pino": "^9.7.0",
+    "pino-http": "^10.5.0",
+    "viem": "2.55.19",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.33.0",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.17.2",
+    "@types/supertest": "^6.0.3",
+    "eslint": "^9.33.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.3.0",
+    "prettier": "^3.6.2",
+    "prisma": "6.12.0",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.39.1",
+    "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "@ethersproject/providers": {
+      "ws": "8.21.3"
+    }
+  }
+}

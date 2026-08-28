@@ -33,10 +33,15 @@ function setup(state: 'COMPLETED' | 'BUDGET_PROPOSED' = 'COMPLETED') {
     new MemoryService(new MockMemoryProvider(), logger),
     logger,
   );
+  const createJob = vi.fn().mockResolvedValue('unexpected-job');
+  const fundJob = vi.fn().mockResolvedValue(undefined);
+  const completeJob = vi.fn().mockResolvedValue(undefined);
+  const rejectJob = vi.fn().mockResolvedValue(undefined);
+  const sendNativeTransfer = vi.fn().mockResolvedValue(hash);
   const source: VirtualsAgentSource = {
     provider: 'virtuals',
     discoverCandidates: vi.fn().mockResolvedValue([]),
-    createJob: vi.fn().mockResolvedValue('unexpected-job'),
+    createJob,
     getJob: vi.fn().mockResolvedValue({
       jobId: 'job-recovery-31',
       chainId: 8453,
@@ -44,16 +49,16 @@ function setup(state: 'COMPLETED' | 'BUDGET_PROPOSED' = 'COMPLETED') {
       providerAddress: '0x3333333333333333333333333333333333333333',
       deliverable: '{"summary":"persisted"}',
     }),
-    fundJob: vi.fn().mockResolvedValue(undefined),
-    completeJob: vi.fn().mockResolvedValue(undefined),
-    rejectJob: vi.fn().mockResolvedValue(undefined),
+    fundJob,
+    completeJob,
+    rejectJob,
     close: vi.fn().mockResolvedValue(undefined),
   };
   const gateway: BaseTransactionGateway = {
     network: 'base-sepolia',
     chainId: 84532,
     explorerBaseUrl: 'https://sepolia.basescan.org',
-    sendNativeTransfer: vi.fn().mockResolvedValue(hash),
+    sendNativeTransfer,
     sendTokenTransfer: vi.fn().mockResolvedValue(hash),
     waitForConfirmation: vi.fn().mockResolvedValue({
       transactionHash: hash,
@@ -73,7 +78,15 @@ function setup(state: 'COMPLETED' | 'BUDGET_PROPOSED' = 'COMPLETED') {
     transactions,
     gateway,
   );
-  return { coordinator, jobs, transactions, recovery, source, gateway };
+  return {
+    coordinator,
+    jobs,
+    transactions,
+    recovery,
+    source,
+    gateway,
+    mocks: { createJob, fundJob, completeJob, rejectJob, sendNativeTransfer },
+  };
 }
 
 async function makeUncertain(
@@ -92,7 +105,7 @@ async function makeUncertain(
 
 describe('MissionReconciliationCoordinator', () => {
   it('reconciles persisted Virtuals and Base receipts without repeating side effects', async () => {
-    const { coordinator, jobs, transactions, recovery, source, gateway } = setup();
+    const { coordinator, jobs, transactions, recovery, mocks } = setup();
     const rootAction = `mission:${mission.id}:agent-attempt:1`;
     await jobs.createOrGet({
       missionId: mission.id,
@@ -139,11 +152,11 @@ describe('MissionReconciliationCoordinator', () => {
       safeToResume: true,
       details: { remainingAmbiguousActions: [] },
     });
-    expect(source.createJob).not.toHaveBeenCalled();
-    expect(source.fundJob).not.toHaveBeenCalled();
-    expect(source.completeJob).not.toHaveBeenCalled();
-    expect(source.rejectJob).not.toHaveBeenCalled();
-    expect(gateway.sendNativeTransfer).not.toHaveBeenCalled();
+    expect(mocks.createJob).not.toHaveBeenCalled();
+    expect(mocks.fundJob).not.toHaveBeenCalled();
+    expect(mocks.completeJob).not.toHaveBeenCalled();
+    expect(mocks.rejectJob).not.toHaveBeenCalled();
+    expect(mocks.sendNativeTransfer).not.toHaveBeenCalled();
     await expect(transactions.findById(transaction.id)).resolves.toMatchObject({
       status: 'CONFIRMED',
       transactionHash: hash,
@@ -155,7 +168,7 @@ describe('MissionReconciliationCoordinator', () => {
   });
 
   it('blocks ambiguous external calls when no durable external identifier exists', async () => {
-    const { coordinator, recovery, source, gateway } = setup('BUDGET_PROPOSED');
+    const { coordinator, recovery, mocks } = setup('BUDGET_PROPOSED');
     await makeUncertain(recovery, `mission:${mission.id}:agent-attempt:1`, 'VIRTUALS_CREATE_JOB');
     await makeUncertain(
       recovery,
@@ -168,7 +181,7 @@ describe('MissionReconciliationCoordinator', () => {
       safeToResume: false,
       failureReason: expect.stringContaining('External outcome cannot be proven'),
     });
-    expect(source.createJob).not.toHaveBeenCalled();
-    expect(gateway.sendNativeTransfer).not.toHaveBeenCalled();
+    expect(mocks.createJob).not.toHaveBeenCalled();
+    expect(mocks.sendNativeTransfer).not.toHaveBeenCalled();
   });
 });

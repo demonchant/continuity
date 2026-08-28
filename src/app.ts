@@ -1,5 +1,5 @@
 import express from 'express';
-import type { Request } from 'express';
+import type { Express, Request } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
@@ -10,7 +10,7 @@ import { HealthService } from './services/health-service.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { logger } from './utils/logger.js';
 
-export function createApp(prisma: PrismaClient) {
+export function createApp(prisma: PrismaClient): Express {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());

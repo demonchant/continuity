@@ -8,7 +8,6 @@ services:
     dockerContext: .
     dockerfilePath: ./backend/Dockerfile
     healthCheckPath: /api/v1/readiness
-    maxShutdownDelaySeconds: 60
     disk:
       name: continuity-sibyl
       mountPath: /data/sibyl

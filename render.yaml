@@ -61,9 +61,9 @@ services:
       - key: BASE_ENABLED
         value: 'true'
       - key: BASE_NETWORK
-        value: base-sepolia
+        value: base
       - key: BASE_CHAIN_ID
-        value: '84532'
+        value: '8453'
       - key: BASE_RPC_URL
         sync: false
       - key: BASE_PRIVATE_KEY
@@ -79,7 +79,7 @@ services:
       - key: BASE_CONFIRMATIONS
         value: '1'
       - key: BASE_ALLOW_MAINNET
-        value: 'false'
+        value: 'true'
       - key: RUNNER_MAX_RETRIES
         value: '2'
       - key: RUNNER_TIMEOUT_MS

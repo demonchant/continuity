@@ -19,6 +19,13 @@ const executeSchema = z
     candidateLimit: z.number().int().min(1).max(20).optional(),
   })
   .strict();
+const discoverySchema = z
+  .object({
+    objective: z.string().trim().min(1).max(2_000),
+    capabilities: z.array(z.string().trim().min(1).max(100)).min(1).max(20),
+    candidateLimit: z.number().int().min(1).max(20).default(10),
+  })
+  .strict();
 const idSchema = z.object({ id: z.string().uuid() }).strict();
 
 function authenticated(expected: string): RequestHandler {
@@ -63,6 +70,23 @@ export function createVirtualsRouter(
 ): Router {
   const router = Router();
   router.use(authenticated(operatorToken));
+  router.post(
+    '/discovery',
+    validateBody(discoverySchema),
+    asyncHandler(async (request, response) => {
+      try {
+        const input = request.body as z.infer<typeof discoverySchema>;
+        const candidates = await execution.discover({
+          missionObjective: input.objective,
+          capabilities: input.capabilities,
+          limit: input.candidateLimit,
+        });
+        response.json({ success: true, data: { candidates } });
+      } catch (error) {
+        publicError(error);
+      }
+    }),
+  );
   router.post(
     '/execute',
     validateBody(executeSchema),

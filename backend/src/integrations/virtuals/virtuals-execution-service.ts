@@ -9,6 +9,7 @@ import type { VerificationReport } from '../../verification/verification.js';
 import type { VerificationService } from '../../verification/verification-service.js';
 import type {
   VirtualsAgentCandidate,
+  VirtualsAgentDiscoveryRequest,
   VirtualsAgentSource,
   VirtualsJobSnapshot,
 } from './virtuals-agent-source.js';
@@ -115,6 +116,14 @@ export class VirtualsExecutionService {
     this.sleep =
       options.sleep ??
       ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  }
+
+  /**
+   * Read-only ACP marketplace discovery. This deliberately bypasses mission
+   * selection, persistence, Sibyl, funding, and Base settlement.
+   */
+  discover(request: VirtualsAgentDiscoveryRequest): Promise<readonly VirtualsAgentCandidate[]> {
+    return this.source.discoverCandidates(request);
   }
 
   async execute(request: ExecuteVirtualsMissionRequest): Promise<VirtualsExecutionResult> {

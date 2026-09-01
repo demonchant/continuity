@@ -38,7 +38,7 @@ const config: ApplicationConfig = {
 const logger = pino({ level: 'silent' });
 
 describe('Virtuals application API', () => {
-  it('exposes authenticated real-execution and durable-job routes', async () => {
+  it('exposes authenticated read-only discovery, execution, and durable-job routes', async () => {
     const missions = new MissionService(new InMemoryMissionRepository());
     const mission = await missions.create({
       objective: 'Research and verify X',
@@ -51,7 +51,16 @@ describe('Virtuals application API', () => {
       decision: { selectedAgent: { provider: 'virtuals' } },
     } as unknown as VirtualsExecutionResult;
     const execute = vi.fn().mockResolvedValue(result);
-    const execution = { execute } as unknown as VirtualsExecutionService;
+    const discover = vi.fn().mockResolvedValue([
+      {
+        agent: { id: 'virtuals:8453:0xabc', name: 'Public ACP Researcher' },
+        chainId: 8453,
+        providerAddress: '0xabc',
+        offeringName: 'research',
+        cost: { amount: '0.25', currency: 'USDC' },
+      },
+    ]);
+    const execution = { execute, discover } as unknown as VirtualsExecutionService;
     const jobs = {
       findById: vi.fn().mockResolvedValue(result.job),
     } as unknown as VirtualsJobRepository;
@@ -83,6 +92,25 @@ describe('Virtuals application API', () => {
         requirements: {},
       });
     expect(malformedAuth.status).toBe(401);
+    expect(execute).not.toHaveBeenCalled();
+
+    const discovery = await request(app)
+      .post('/api/v1/virtuals/discovery')
+      .set('authorization', `Bearer ${config.virtuals.operatorToken}`)
+      .send({
+        objective: 'Research and verify X',
+        capabilities: ['research'],
+        candidateLimit: 10,
+      });
+    expect(discovery.status).toBe(200);
+    expect(discovery.body.data.candidates).toMatchObject([
+      { offeringName: 'research', chainId: 8453 },
+    ]);
+    expect(discover).toHaveBeenCalledWith({
+      missionObjective: 'Research and verify X',
+      capabilities: ['research'],
+      limit: 10,
+    });
     expect(execute).not.toHaveBeenCalled();
 
     const malformed = await request(app)

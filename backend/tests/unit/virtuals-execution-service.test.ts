@@ -91,6 +91,32 @@ function setup(
 }
 
 describe('VirtualsExecutionService', () => {
+  it('discovers public offerings without invoking ACP lifecycle actions or Sibyl writes', async () => {
+    const source = new MockVirtualsSource([]);
+    const { service, provider } = setup(source);
+
+    await expect(
+      service.discover({
+        missionObjective: 'Research and verify X',
+        capabilities: ['research'],
+        limit: 10,
+      }),
+    ).resolves.toEqual([candidate]);
+
+    expect(source.discoverCandidates).toHaveBeenCalledWith({
+      missionObjective: 'Research and verify X',
+      capabilities: ['research'],
+      limit: 10,
+    });
+    expect(source.createJob).not.toHaveBeenCalled();
+    expect(source.fundJob).not.toHaveBeenCalled();
+    expect(source.completeJob).not.toHaveBeenCalled();
+    expect(source.rejectJob).not.toHaveBeenCalled();
+    expect(provider.records).toEqual([]);
+    expect(provider.events).toEqual([]);
+    expect(provider.checkpoints).toEqual([]);
+  });
+
   it('funds, verifies, completes, and persists a successful real job flow', async () => {
     const source = new MockVirtualsSource([
       {

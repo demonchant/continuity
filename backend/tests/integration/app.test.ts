@@ -182,7 +182,10 @@ describe('global request errors', () => {
         statusCode: 502,
         code: 'VIRTUALS_DISCOVERY_FAILED',
         message: 'Virtuals ACP agent discovery failed',
-        cause: new Error('Privy signer private key is invalid: secret-value'),
+        cause: Object.assign(
+          new Error('browseAgents failed: 502 upstream-sensitive-status-text'),
+          { code: 'ECONNRESET' },
+        ),
       });
     });
     app.use(createErrorHandler(discoveryLogger));
@@ -194,11 +197,15 @@ describe('global request errors', () => {
       {
         event: 'virtuals.discovery.failed',
         requestId: undefined,
-        failureClass: 'INVALID_SIGNER_OR_WALLET_CONFIGURATION',
+        failureClass: 'PROVIDER_UNAVAILABLE_OR_NETWORK_ERROR',
+        rootErrorName: 'Error',
+        rootErrorCode: 'ECONNRESET',
+        upstreamStatus: 502,
       },
       'Virtuals discovery failed',
     );
     expect(JSON.stringify(warn.mock.calls)).not.toContain('secret-value');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('upstream-sensitive-status-text');
   });
 
   it('does not expose unexpected internal errors', async () => {

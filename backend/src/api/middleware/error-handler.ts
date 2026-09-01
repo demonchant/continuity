@@ -33,6 +33,50 @@ type VirtualsDiscoveryFailureClass =
   | 'PROVIDER_UNAVAILABLE_OR_NETWORK_ERROR'
   | 'UNKNOWN_PROVIDER_ERROR';
 
+interface VirtualsDiscoveryDiagnostic {
+  readonly failureClass: VirtualsDiscoveryFailureClass;
+  readonly rootErrorName: string;
+  readonly rootErrorCode?: string;
+  readonly upstreamStatus?: number;
+}
+
+function objectProperty(value: unknown, key: string): unknown {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>)[key] : undefined;
+}
+
+function safeErrorName(value: unknown): string {
+  const name = objectProperty(value, 'name');
+  return typeof name === 'string' && /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(name)
+    ? name
+    : 'UnknownError';
+}
+
+function safeErrorCode(value: unknown): string | undefined {
+  const code = objectProperty(value, 'code');
+  return typeof code === 'string' && /^[A-Z][A-Z0-9_:-]{0,63}$/.test(code) ? code : undefined;
+}
+
+function safeStatus(value: unknown): number | undefined {
+  for (const candidate of [
+    objectProperty(value, 'status'),
+    objectProperty(value, 'statusCode'),
+    objectProperty(objectProperty(value, 'response'), 'status'),
+  ]) {
+    if (typeof candidate === 'number' && Number.isInteger(candidate) && candidate >= 100 && candidate <= 599)
+      return candidate;
+  }
+  // ACP SDK v0.1.12 throws a plain Error in the form
+  // "browseAgents failed: <status> <statusText>". Retain only the status;
+  // provider text must never enter the diagnostic.
+  const message = objectProperty(value, 'message');
+  const match =
+    typeof message === 'string'
+      ? /^(?:browseAgents|Agent auth) failed:\s+([1-5]\d\d)\b/.exec(message)
+      : null;
+  if (match?.[1]) return Number(match[1]);
+  return undefined;
+}
+
 /**
  * Produces a bounded diagnostic category only. Raw provider error text is
  * intentionally never returned to the caller or written to logs.
@@ -55,6 +99,23 @@ function classifyVirtualsDiscoveryFailure(error: unknown): VirtualsDiscoveryFail
     return 'PROVIDER_UNAVAILABLE_OR_NETWORK_ERROR';
   }
   return 'UNKNOWN_PROVIDER_ERROR';
+}
+
+function virtualsDiscoveryDiagnostic(error: unknown): VirtualsDiscoveryDiagnostic {
+  let root = error;
+  let current = error;
+  for (let depth = 0; depth < 4 && current instanceof Error; depth += 1) {
+    root = current;
+    current = current.cause;
+  }
+  const rootErrorCode = safeErrorCode(root);
+  const upstreamStatus = safeStatus(root);
+  return {
+    failureClass: classifyVirtualsDiscoveryFailure(error),
+    rootErrorName: safeErrorName(root),
+    ...(rootErrorCode ? { rootErrorCode } : {}),
+    ...(upstreamStatus ? { upstreamStatus } : {}),
+  };
 }
 
 export function createNotFoundHandler(): RequestHandler {
@@ -120,7 +181,7 @@ export function createErrorHandler(logger: Logger): ErrorRequestHandler {
           {
             event: 'virtuals.discovery.failed',
             requestId: requestIdDetails(request.id).requestId,
-            failureClass: classifyVirtualsDiscoveryFailure(error),
+            ...virtualsDiscoveryDiagnostic(error),
           },
           'Virtuals discovery failed',
         );

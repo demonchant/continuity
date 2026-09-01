@@ -173,6 +173,34 @@ describe('global request errors', () => {
     expect(response.body.error).toMatchObject({ code: 'CONFLICT', message: 'Conflict' });
   });
 
+  it('logs only a bounded diagnostic category for Virtuals discovery failures', async () => {
+    const warn = vi.fn();
+    const discoveryLogger = { ...logger, warn };
+    const app = express();
+    app.get('/discovery', () => {
+      throw new AppError({
+        statusCode: 502,
+        code: 'VIRTUALS_DISCOVERY_FAILED',
+        message: 'Virtuals ACP agent discovery failed',
+        cause: new Error('Privy signer private key is invalid: secret-value'),
+      });
+    });
+    app.use(createErrorHandler(discoveryLogger));
+
+    const response = await request(app).get('/discovery').set('x-request-id', 'discovery-test');
+    expect(response.status).toBe(502);
+    expect(JSON.stringify(response.body)).not.toContain('secret-value');
+    expect(warn).toHaveBeenCalledWith(
+      {
+        event: 'virtuals.discovery.failed',
+        requestId: undefined,
+        failureClass: 'INVALID_SIGNER_OR_WALLET_CONFIGURATION',
+      },
+      'Virtuals discovery failed',
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('secret-value');
+  });
+
   it('does not expose unexpected internal errors', async () => {
     const app = express();
     app.get('/unexpected', () => {

@@ -27,6 +27,36 @@ function requestIdDetails(requestId: unknown): { requestId?: string } {
     : {};
 }
 
+type VirtualsDiscoveryFailureClass =
+  | 'AUTHENTICATION_OR_AUTHORIZATION'
+  | 'INVALID_SIGNER_OR_WALLET_CONFIGURATION'
+  | 'PROVIDER_UNAVAILABLE_OR_NETWORK_ERROR'
+  | 'UNKNOWN_PROVIDER_ERROR';
+
+/**
+ * Produces a bounded diagnostic category only. Raw provider error text is
+ * intentionally never returned to the caller or written to logs.
+ */
+function classifyVirtualsDiscoveryFailure(error: unknown): VirtualsDiscoveryFailureClass {
+  const messages: string[] = [];
+  let current = error;
+  for (let depth = 0; depth < 4 && current instanceof Error; depth += 1) {
+    messages.push(current.message.toLowerCase());
+    current = current.cause;
+  }
+  const combined = messages.join(' ');
+  if (/signer|pkcs.?8|private key|wallet.?id|wallet address/.test(combined)) {
+    return 'INVALID_SIGNER_OR_WALLET_CONFIGURATION';
+  }
+  if (/unauthori[sz]ed|forbidden|authentication|credential|\b401\b|\b403\b/.test(combined)) {
+    return 'AUTHENTICATION_OR_AUTHORIZATION';
+  }
+  if (/timeout|timed out|econn|enotfound|network|socket|unavailable|\b5\d\d\b/.test(combined)) {
+    return 'PROVIDER_UNAVAILABLE_OR_NETWORK_ERROR';
+  }
+  return 'UNKNOWN_PROVIDER_ERROR';
+}
+
 export function createNotFoundHandler(): RequestHandler {
   return (request, response) => {
     const payload: ErrorPayload = {
@@ -85,6 +115,16 @@ export function createErrorHandler(logger: Logger): ErrorRequestHandler {
     }
 
     if (error instanceof AppError) {
+      if (error.code === 'VIRTUALS_DISCOVERY_FAILED') {
+        logger.warn(
+          {
+            event: 'virtuals.discovery.failed',
+            requestId: requestIdDetails(request.id).requestId,
+            failureClass: classifyVirtualsDiscoveryFailure(error),
+          },
+          'Virtuals discovery failed',
+        );
+      }
       response.status(error.statusCode).json({
         success: false,
         error: {

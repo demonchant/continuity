@@ -198,6 +198,7 @@ describe('global request errors', () => {
         event: 'virtuals.discovery.failed',
         requestId: undefined,
         failureClass: 'PROVIDER_UNAVAILABLE_OR_NETWORK_ERROR',
+        failureStage: 'ACP_AGENT_SEARCH',
         rootErrorName: 'Error',
         rootErrorCode: 'ECONNRESET',
         upstreamStatus: 502,

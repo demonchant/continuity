@@ -33,8 +33,11 @@ type VirtualsDiscoveryFailureClass =
   | 'PROVIDER_UNAVAILABLE_OR_NETWORK_ERROR'
   | 'UNKNOWN_PROVIDER_ERROR';
 
+type VirtualsDiscoveryFailureStage = 'ACP_AUTHENTICATION' | 'ACP_AGENT_SEARCH' | 'UNKNOWN';
+
 interface VirtualsDiscoveryDiagnostic {
   readonly failureClass: VirtualsDiscoveryFailureClass;
+  readonly failureStage: VirtualsDiscoveryFailureStage;
   readonly rootErrorName: string;
   readonly rootErrorCode?: string;
   readonly upstreamStatus?: number;
@@ -101,6 +104,14 @@ function classifyVirtualsDiscoveryFailure(error: unknown): VirtualsDiscoveryFail
   return 'UNKNOWN_PROVIDER_ERROR';
 }
 
+function classifyVirtualsDiscoveryFailureStage(error: unknown): VirtualsDiscoveryFailureStage {
+  const message = objectProperty(error, 'message');
+  if (typeof message !== 'string') return 'UNKNOWN';
+  if (/^Agent auth failed:\s+[1-5]\d\d\b/.test(message)) return 'ACP_AUTHENTICATION';
+  if (/^browseAgents failed:\s+[1-5]\d\d\b/.test(message)) return 'ACP_AGENT_SEARCH';
+  return 'UNKNOWN';
+}
+
 function virtualsDiscoveryDiagnostic(error: unknown): VirtualsDiscoveryDiagnostic {
   let root = error;
   let current = error;
@@ -112,6 +123,7 @@ function virtualsDiscoveryDiagnostic(error: unknown): VirtualsDiscoveryDiagnosti
   const upstreamStatus = safeStatus(root);
   return {
     failureClass: classifyVirtualsDiscoveryFailure(error),
+    failureStage: classifyVirtualsDiscoveryFailureStage(root),
     rootErrorName: safeErrorName(root),
     ...(rootErrorCode ? { rootErrorCode } : {}),
     ...(upstreamStatus ? { upstreamStatus } : {}),

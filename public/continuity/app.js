@@ -2,6 +2,7 @@ const app = document.querySelector('#app');
 const refreshButton = document.querySelector('#refresh-button');
 const menuButton = document.querySelector('.menu-button');
 const lastUpdated = document.querySelector('#last-updated');
+const operatorTokenStorageKey = 'continuity.dashboard.operator-token';
 
 const state = {
   overview: null,
@@ -55,9 +56,22 @@ function status(value) {
   return `<span class="status ${statusClass(value)}">${escapeHtml(String(value || 'unknown').replaceAll('_', ' '))}</span>`;
 }
 
-async function fetchJson(path) {
-  const response = await fetch(path, { headers: { accept: 'application/json' } });
+function operatorToken() {
+  return sessionStorage.getItem(operatorTokenStorageKey)?.trim() || '';
+}
+
+async function fetchJson(path, requiresOperatorToken = false) {
+  const token = requiresOperatorToken ? operatorToken() : '';
+  const response = await fetch(path, {
+    headers: {
+      accept: 'application/json',
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+  });
   const body = await response.json().catch(() => null);
+  if (requiresOperatorToken && response.status === 401) {
+    throw new Error('DASHBOARD_AUTH_REQUIRED');
+  }
   if (!response.ok) {
     throw new Error(
       body?.error?.message || body?.message || `Request failed with ${response.status}`,
@@ -67,13 +81,17 @@ async function fetchJson(path) {
 }
 
 async function overview(force = false) {
-  if (!state.overview || force) state.overview = await fetchJson('/api/v1/dashboard/overview');
+  if (!state.overview || force)
+    state.overview = await fetchJson('/api/v1/dashboard/overview', true);
   return state.overview;
 }
 
 async function detail(id, force = false) {
   if (!state.details.has(id) || force) {
-    state.details.set(id, await fetchJson(`/api/v1/dashboard/missions/${encodeURIComponent(id)}`));
+    state.details.set(
+      id,
+      await fetchJson(`/api/v1/dashboard/missions/${encodeURIComponent(id)}`, true),
+    );
   }
   return state.details.get(id);
 }
@@ -103,6 +121,20 @@ function empty(title, description, action = '') {
 }
 
 function renderError(error) {
+  if (error instanceof Error && error.message === 'DASHBOARD_AUTH_REQUIRED') {
+    app.innerHTML = `<div class="error-state"><div><span class="empty-icon" aria-hidden="true">!</span><h2>Operator access required</h2><p>Enter the dashboard operator token to load protected telemetry. It is kept only for this browser session.</p><form data-operator-token-form><label class="sr-only" for="operator-token">Operator token</label><input class="operator-token-input" id="operator-token" type="password" autocomplete="off" required><button class="button" type="submit">Unlock dashboard</button></form></div></div>`;
+    document.querySelector('[data-operator-token-form]')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const input = document.querySelector('#operator-token');
+      const token = input instanceof HTMLInputElement ? input.value.trim() : '';
+      if (!token) return;
+      sessionStorage.setItem(operatorTokenStorageKey, token);
+      state.overview = null;
+      state.details.clear();
+      route(true);
+    });
+    return;
+  }
   app.innerHTML = `<div class="error-state"><div><span class="empty-icon" aria-hidden="true">!</span><h2>Telemetry unavailable</h2><p>${escapeHtml(error instanceof Error ? error.message : 'The dashboard could not load operational data.')}</p><button class="button" type="button" data-retry>Try again</button></div></div>`;
   document.querySelector('[data-retry]')?.addEventListener('click', () => route(true));
 }

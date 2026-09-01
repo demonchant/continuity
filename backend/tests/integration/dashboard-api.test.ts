@@ -198,6 +198,8 @@ describe('Phase 13 dashboard and Phase 14 Judge Mode', () => {
     expect(client.status).toBe(200);
     expect(client.text).toContain('WHY THIS AGENT?');
     expect(client.text).toContain('What was written afterward');
+    expect(client.text).toContain('DASHBOARD_AUTH_REQUIRED');
+    expect(client.text).toContain('operator-token');
     expect((await request(application).get('/dashboard/judge')).status).toBe(200);
 
     const response = await request(application).get(`/api/v1/dashboard/missions/${mission.id}`);

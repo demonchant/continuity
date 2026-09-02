@@ -1,3 +1,5 @@
+import type { AcpEvidenceProvenance } from '../verification/evidence-hash.js';
+
 export const memoryCategories = [
   'mission',
   'agent',
@@ -77,6 +79,8 @@ export interface MemoryRecord {
   readonly confidence?: number;
   readonly recommendation?: string;
   readonly providerReference?: string;
+  readonly evidenceHash?: string;
+  readonly provenance?: AcpEvidenceProvenance;
   readonly tags?: readonly string[];
   readonly memoryReferences?: readonly string[];
   readonly decisionCandidates?: readonly MemoryDecisionCandidate[];

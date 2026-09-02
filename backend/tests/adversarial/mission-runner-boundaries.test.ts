@@ -111,6 +111,22 @@ async function mission(missions: MissionService, timeoutMs = 60_000) {
 }
 
 describe('Phase 17 hostile autonomous runner boundaries', () => {
+  it('limits a zero-retry demo mission to one ACP execution attempt', async () => {
+    const missions = new MissionService(new InMemoryMissionRepository());
+    const execute = vi.fn().mockRejectedValue(new Error('provider failed after funding'));
+    const subject = runner({
+      missions,
+      memory: new MemoryService(new MockMemoryProvider(), logger),
+      execute,
+    });
+    const created = await mission(missions);
+
+    await expect(subject.service.run(created.id)).rejects.toMatchObject({
+      code: 'MISSION_RUN_FAILED',
+    });
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
   it('refuses repeated execution of an already completed mission', async () => {
     const missions = new MissionService(new InMemoryMissionRepository());
     const provider = new MockMemoryProvider();

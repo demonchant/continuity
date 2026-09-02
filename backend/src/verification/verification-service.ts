@@ -370,6 +370,8 @@ export class VerificationService {
       ...(request.result.providerReference
         ? { providerReference: request.result.providerReference }
         : {}),
+      ...(request.result.evidenceHash ? { evidenceHash: request.result.evidenceHash } : {}),
+      ...(request.result.provenance ? { provenance: request.result.provenance } : {}),
       tags: ['result-verification', reportId],
     };
     const memoryWrites = await Promise.all(
@@ -405,6 +407,8 @@ export class VerificationService {
       memoryRecordId: memoryWrite.record.id,
       sibylRecordId: memoryWrite.sibylRecordId,
       sibylEventId: memoryWrite.sibylEventId,
+      ...(request.result.evidenceHash ? { evidenceHash: request.result.evidenceHash } : {}),
+      ...(request.result.provenance ? { provenance: request.result.provenance } : {}),
     };
   }
 }

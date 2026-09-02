@@ -182,10 +182,9 @@ describe('global request errors', () => {
         statusCode: 502,
         code: 'VIRTUALS_DISCOVERY_FAILED',
         message: 'Virtuals ACP agent discovery failed',
-        cause: Object.assign(
-          new Error('browseAgents failed: 502 upstream-sensitive-status-text'),
-          { code: 'ECONNRESET' },
-        ),
+        cause: Object.assign(new Error('browseAgents failed: 502 upstream-sensitive-status-text'), {
+          code: 'ECONNRESET',
+        }),
       });
     });
     app.use(createErrorHandler(discoveryLogger));

@@ -36,6 +36,9 @@ export interface ApplicationConfig {
     readonly walletId?: string;
     readonly signerPrivateKey?: string;
     readonly builderCode?: string;
+    readonly discoveryAccessToken?: string;
+    readonly discoveryRefreshToken?: string;
+    readonly discoveryTimeoutMs?: number;
     readonly chainId: number;
     readonly maxJobUsdc: number;
     readonly pollIntervalMs: number;
@@ -107,6 +110,13 @@ export function loadConfig(input: NodeJS.ProcessEnv = process.env): ApplicationC
       ...(environment.VIRTUALS_BUILDER_CODE
         ? { builderCode: environment.VIRTUALS_BUILDER_CODE }
         : {}),
+      ...(environment.VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN
+        ? { discoveryAccessToken: environment.VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN }
+        : {}),
+      ...(environment.VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN
+        ? { discoveryRefreshToken: environment.VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN }
+        : {}),
+      discoveryTimeoutMs: environment.VIRTUALS_DISCOVERY_TIMEOUT_MS,
       chainId: environment.VIRTUALS_CHAIN_ID,
       maxJobUsdc: environment.VIRTUALS_MAX_JOB_USDC,
       pollIntervalMs: environment.VIRTUALS_POLL_INTERVAL_MS,

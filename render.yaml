@@ -47,6 +47,14 @@ services:
         sync: false
       - key: VIRTUALS_OPERATOR_TOKEN
         sync: false
+      # OAuth bearer credentials are consumed only by read-only agent discovery.
+      # Add/rotate both values manually in Render; never commit their values.
+      - key: VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN
+        sync: false
+      - key: VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN
+        sync: false
+      - key: VIRTUALS_DISCOVERY_TIMEOUT_MS
+        value: '15000'
       - key: VIRTUALS_CHAIN_ID
         value: '8453'
       - key: VIRTUALS_MAX_JOB_USDC

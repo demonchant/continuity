@@ -55,9 +55,12 @@ Replace every `REPLACE_WITH_SECRET` value and placeholder. Generate independent,
 - `POSTGRES_PASSWORD`
 - `CONTINUITY_OPERATOR_TOKEN`
 - `VIRTUALS_SIGNER_PRIVATE_KEY`, wallet identifiers, and `VIRTUALS_OPERATOR_TOKEN`
+- `VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN` and `VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN`
 - `BASE_PRIVATE_KEY` and `BASE_OPERATOR_TOKEN`
 
 Never put secrets in Compose YAML, Docker build arguments, Git, screenshots, logs, issue comments, or `DEPLOYMENT.md`. Production rejects disabled Sibyl memory and incomplete enabled-provider configuration. Base mainnet additionally requires `BASE_ALLOW_MAINNET=true`.
+
+Virtuals discovery OAuth is intentionally separate from the ACP SDK execution signer. Obtain the two discovery values locally with the official `acp configure` browser flow, then copy them directly from the local OS keychain into Render's secret fields without placing them in source or chat. The OAuth client can only call token refresh and `GET /agents/search`; it has no job or wallet methods. Virtuals rotates the refresh token. The running single-instance process keeps the rotated pair in memory, so re-run `acp configure` and replace both Render values before a later restart if the configured refresh token has already been consumed.
 
 ## CORS and HTTPS
 

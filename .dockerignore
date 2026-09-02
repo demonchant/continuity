@@ -14,4 +14,10 @@ backend/coverage
 .tmp-playwright
 .tmp-playwright-*.png
 *.log
+*.mp4
+voiceover-output
+voiceover-segments.json
+CONTINUITY_VOICEOVER.md
+**/signer-keys.json
+**/.config/acp
 PHASE17_FINAL_REPORT.md

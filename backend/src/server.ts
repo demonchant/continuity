@@ -75,6 +75,8 @@ async function main(): Promise<void> {
       !config.virtuals.walletAddress ||
       !config.virtuals.walletId ||
       !config.virtuals.signerPrivateKey ||
+      !config.virtuals.discoveryAccessToken ||
+      !config.virtuals.discoveryRefreshToken ||
       !config.virtuals.operatorToken
     ) {
       throw new Error('Validated Virtuals configuration is incomplete');
@@ -85,6 +87,11 @@ async function main(): Promise<void> {
       walletId: config.virtuals.walletId,
       signerPrivateKey: config.virtuals.signerPrivateKey,
       chainId: config.virtuals.chainId,
+      discoveryAccessToken: config.virtuals.discoveryAccessToken,
+      discoveryRefreshToken: config.virtuals.discoveryRefreshToken,
+      ...(config.virtuals.discoveryTimeoutMs
+        ? { discoveryTimeoutMs: config.virtuals.discoveryTimeoutMs }
+        : {}),
       ...(config.virtuals.builderCode ? { builderCode: config.virtuals.builderCode } : {}),
     });
     virtualsExecution = new VirtualsExecutionService(

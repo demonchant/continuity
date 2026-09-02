@@ -7,6 +7,7 @@ import type { JsonObject, JsonValue, Mission } from '../../missions/mission.js';
 import type { RecoveryService } from '../../recovery/recovery-service.js';
 import type { VerificationReport } from '../../verification/verification.js';
 import type { VerificationService } from '../../verification/verification-service.js';
+import { createAcpEvidence } from '../../verification/evidence-hash.js';
 import type {
   VirtualsAgentCandidate,
   VirtualsAgentDiscoveryRequest,
@@ -209,6 +210,16 @@ export class VirtualsExecutionService {
         state: 'SUBMITTED',
         ...(snapshot.deliverable === undefined ? {} : { result: asObject(snapshot.deliverable) }),
       });
+      const evidence = createAcpEvidence(jsonValue(snapshot.deliverable ?? ''), {
+        acpJobId: snapshot.jobId,
+        providerId:
+          typeof candidate.agent.metadata?.acpAgentId === 'string'
+            ? candidate.agent.metadata.acpAgentId
+            : candidate.agent.id,
+        offeringId: candidate.offeringId ?? candidate.offeringName,
+        jobCreatedAt: job.createdAt.toISOString(),
+        evidenceCapturedAt: job.updatedAt.toISOString(),
+      });
       const report = await this.verification.verify({
         mission: request.mission,
         agent: candidate.agent,
@@ -217,7 +228,15 @@ export class VirtualsExecutionService {
           output: snapshot.deliverable ?? '',
           providerReference: snapshot.jobId,
           ...(snapshot.budget ? { cost: snapshot.budget } : {}),
+          ...evidence,
         },
+      });
+      job = await this.jobs.update({
+        id: job.id,
+        state: 'SUBMITTED',
+        verification: asObject(report),
+        evidenceHash: evidence.evidenceHash,
+        provenance: evidence.provenance,
       });
       const terminal = report.passed ? 'COMPLETED' : 'REJECTED';
       await this.settle(request, candidate, snapshot, report);
@@ -226,6 +245,8 @@ export class VirtualsExecutionService {
         state: terminal,
         ...(snapshot.deliverable === undefined ? {} : { result: asObject(snapshot.deliverable) }),
         verification: asObject(report),
+        evidenceHash: evidence.evidenceHash,
+        provenance: evidence.provenance,
         lifecycle: {
           initialState: 'CREATED',
           observedStates: [

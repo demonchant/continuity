@@ -44,7 +44,9 @@ interface VirtualsDiscoveryDiagnostic {
 }
 
 function objectProperty(value: unknown, key: string): unknown {
-  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>)[key] : undefined;
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
 }
 
 function safeErrorName(value: unknown): string {
@@ -65,7 +67,12 @@ function safeStatus(value: unknown): number | undefined {
     objectProperty(value, 'statusCode'),
     objectProperty(objectProperty(value, 'response'), 'status'),
   ]) {
-    if (typeof candidate === 'number' && Number.isInteger(candidate) && candidate >= 100 && candidate <= 599)
+    if (
+      typeof candidate === 'number' &&
+      Number.isInteger(candidate) &&
+      candidate >= 100 &&
+      candidate <= 599
+    )
       return candidate;
   }
   // ACP SDK v0.1.12 throws a plain Error in the form

@@ -1,4 +1,5 @@
 import type { JsonObject } from '../../missions/mission.js';
+import type { AcpEvidenceProvenance } from '../../verification/evidence-hash.js';
 
 export const persistedVirtualsJobStates = [
   'CREATED',
@@ -28,6 +29,8 @@ export interface VirtualsJob {
   readonly result?: JsonObject;
   readonly verification?: JsonObject;
   readonly lifecycle?: JsonObject;
+  readonly evidenceHash?: string;
+  readonly provenance?: AcpEvidenceProvenance;
   readonly errorCode?: string;
   readonly errorMessage?: string;
   readonly createdAt: Date;
@@ -53,6 +56,8 @@ export interface UpdateVirtualsJobInput {
   readonly result?: JsonObject;
   readonly verification?: JsonObject;
   readonly lifecycle?: JsonObject;
+  readonly evidenceHash?: string;
+  readonly provenance?: AcpEvidenceProvenance;
   readonly errorCode?: string;
   readonly errorMessage?: string;
 }

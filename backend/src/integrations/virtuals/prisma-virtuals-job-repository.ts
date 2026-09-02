@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient, type VirtualsJob as PrismaVirtualsJob } from '@prisma/client';
 import type { JsonObject } from '../../missions/mission.js';
+import type { AcpEvidenceProvenance } from '../../verification/evidence-hash.js';
 import type { VirtualsJobRepository } from './virtuals-job-repository.js';
 import type {
   CreateVirtualsJobInput,
@@ -20,6 +21,7 @@ function toDomain(record: PrismaVirtualsJob): VirtualsJob {
     ? jsonObject(record.verification, 'verification')
     : undefined;
   const lifecycle = record.lifecycle ? jsonObject(record.lifecycle, 'lifecycle') : undefined;
+  const provenance = record.provenance ? jsonObject(record.provenance, 'provenance') : undefined;
   return {
     id: record.id,
     missionId: record.missionId,
@@ -34,6 +36,8 @@ function toDomain(record: PrismaVirtualsJob): VirtualsJob {
     ...(result ? { result } : {}),
     ...(verification ? { verification } : {}),
     ...(lifecycle ? { lifecycle } : {}),
+    ...(record.evidenceHash ? { evidenceHash: record.evidenceHash } : {}),
+    ...(provenance ? { provenance: provenance as AcpEvidenceProvenance } : {}),
     ...(record.errorCode ? { errorCode: record.errorCode } : {}),
     ...(record.errorMessage ? { errorMessage: record.errorMessage } : {}),
     createdAt: record.createdAt,
@@ -98,6 +102,8 @@ export class PrismaVirtualsJobRepository implements VirtualsJobRepository {
         ...(input.result ? { result: input.result } : {}),
         ...(input.verification ? { verification: input.verification } : {}),
         ...(input.lifecycle ? { lifecycle: input.lifecycle } : {}),
+        ...(input.evidenceHash ? { evidenceHash: input.evidenceHash } : {}),
+        ...(input.provenance ? { provenance: input.provenance } : {}),
         errorCode: input.errorCode ?? null,
         errorMessage: input.errorMessage ?? null,
         ...(terminal ? { completedAt: new Date() } : {}),

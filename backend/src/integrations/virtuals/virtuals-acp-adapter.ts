@@ -1,16 +1,11 @@
 import {
   AcpAgent,
-  AgentSort,
   AcpJobStatus,
-  OnlineStatus,
   PrivyAlchemyEvmProviderAdapter,
   getEvmChainByChainId,
-  type AcpAgentDetail,
-  type AcpAgentOffering,
   type JobSession,
   type OffChainJob,
 } from '@virtuals-protocol/acp-node-v2';
-import type { JsonObject, JsonValue } from '../../missions/mission.js';
 import type {
   CreateVirtualsJobRequest,
   VirtualsAgentCandidate,
@@ -21,9 +16,9 @@ import type {
 } from './virtuals-agent-source.js';
 import { VirtualsProtocolError } from './virtuals-errors.js';
 import {
-  analyzeOfferingCompatibility,
-  type OfferingCompatibility,
-} from './offering-compatibility.js';
+  VirtualsOAuthDiscoveryClient,
+  type VirtualsDiscoveryClient,
+} from './virtuals-discovery-client.js';
 
 export interface VirtualsAcpConfiguration {
   readonly walletAddress: `0x${string}`;
@@ -31,16 +26,15 @@ export interface VirtualsAcpConfiguration {
   readonly signerPrivateKey: string;
   readonly chainId: number;
   readonly builderCode?: string;
+  readonly discoveryAccessToken: string;
+  readonly discoveryRefreshToken: string;
+  readonly discoveryTimeoutMs?: number;
 }
 
 export interface VirtualsAcpAgentClient {
   start(): Promise<void>;
   stop(): Promise<void>;
   getAddress(): Promise<string>;
-  browseAgents(
-    keyword: string,
-    params?: Parameters<AcpAgent['browseAgents']>[1],
-  ): Promise<AcpAgentDetail[]>;
   createJobByOfferingName(
     chainId: number,
     offeringName: string,
@@ -50,24 +44,6 @@ export interface VirtualsAcpAgentClient {
   ): Promise<bigint>;
   getSession(chainId: number, jobId: string): JobSession | undefined;
   getApi(): { getJob(chainId: number, jobId: string): Promise<OffChainJob | null> };
-}
-
-function safeJson(value: unknown): JsonValue {
-  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
-    return value as JsonValue;
-  }
-  if (Array.isArray(value)) return value.map(safeJson);
-  if (typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).flatMap(([key, item]) =>
-        item === undefined ? [] : [[key, safeJson(item)]],
-      ),
-    );
-  }
-  if (typeof value === 'bigint') return value.toString();
-  if (typeof value === 'symbol') return value.description ?? 'symbol';
-  if (typeof value === 'function') return '[function]';
-  return 'undefined';
 }
 
 function stateFromSession(status: JobSession['status']): VirtualsJobState {
@@ -111,84 +87,14 @@ function stateFromApi(status: OffChainJob['jobStatus']): VirtualsJobState {
   );
 }
 
-function chooseOffering(
-  agent: AcpAgentDetail,
-  capabilities: readonly string[],
-): { readonly offering: AcpAgentOffering; readonly compatibility: OfferingCompatibility } | null {
-  return (
-    agent.offerings
-      .filter((offering) => !offering.isHidden && !offering.isPrivate)
-      .map((offering) => ({
-        offering,
-        compatibility: analyzeOfferingCompatibility(offering, capabilities),
-      }))
-      .filter(({ compatibility }) => compatibility.compatible)
-      .sort(
-        (left, right) =>
-          right.compatibility.score - left.compatibility.score ||
-          left.offering.priceValue - right.offering.priceValue ||
-          left.offering.name.localeCompare(right.offering.name),
-      )[0] ?? null
-  );
-}
-
-function normalizeCandidate(
-  detail: AcpAgentDetail,
-  offering: AcpAgentOffering,
-  chainId: number,
-  compatibility: OfferingCompatibility,
-): VirtualsAgentCandidate {
-  const capabilities = compatibility.matchedCapabilities;
-  const metadata: JsonObject = {
-    acpAgentId: detail.id,
-    walletAddress: detail.walletAddress,
-    chainId,
-    cluster: detail.cluster,
-    tag: detail.tag,
-    lastActiveAt: detail.lastActiveAt,
-    rating: detail.rating,
-    offering: safeJson(compatibility.rawMetadata),
-    advertisedCapabilities: safeJson(compatibility.advertisedCapabilities),
-    matchedCapabilities: safeJson(compatibility.matchedCapabilities),
-    compatibilityScore: compatibility.score,
-    compatibilityReasons: safeJson(compatibility.reasons),
-    inputSchema: safeJson(compatibility.inputSchema),
-    outputSchema: safeJson(compatibility.outputSchema),
-    capabilityBasis:
-      'Matched from actual ACP offering name, description, requirements, and deliverable metadata',
-  };
-  return {
-    agent: {
-      id: `virtuals:${chainId}:${detail.walletAddress.toLowerCase()}`,
-      externalId: detail.walletAddress,
-      name: detail.name,
-      source: 'EXTERNAL_VIRTUALS',
-      provider: 'virtuals',
-      capabilities,
-      status: 'AVAILABLE',
-      cost: {
-        model: 'FIXED',
-        amount: offering.priceValue.toString(),
-        currency: 'USDC',
-        description: `ACP offering ${offering.name} (${offering.priceType})`,
-      },
-      metadata,
-    },
-    chainId,
-    providerAddress: detail.walletAddress,
-    offeringName: offering.name,
-    offeringRequirements: offering.requirements,
-    compatibility,
-  };
-}
-
 export class VirtualsAcpAdapter implements VirtualsAgentSource {
   readonly provider = 'virtuals' as const;
   private startPromise?: Promise<void>;
 
   constructor(
     private readonly agent: VirtualsAcpAgentClient,
-    private readonly chainId: number,
+    _chainId: number,
+    private readonly discovery: VirtualsDiscoveryClient,
   ) {}
 
   static async create(configuration: VirtualsAcpConfiguration): Promise<VirtualsAcpAdapter> {
@@ -210,28 +116,23 @@ export class VirtualsAcpAdapter implements VirtualsAgentSource {
     return new VirtualsAcpAdapter(
       await AcpAgent.create({ evmProvider: provider }),
       configuration.chainId,
+      new VirtualsOAuthDiscoveryClient({
+        accessToken: configuration.discoveryAccessToken,
+        refreshToken: configuration.discoveryRefreshToken,
+        chainId: configuration.chainId,
+        walletAddressToExclude: configuration.walletAddress,
+        ...(configuration.discoveryTimeoutMs
+          ? { timeoutMs: configuration.discoveryTimeoutMs }
+          : {}),
+      }),
     );
   }
 
   async discoverCandidates(
     request: VirtualsAgentDiscoveryRequest,
   ): Promise<readonly VirtualsAgentCandidate[]> {
-    await this.start();
     try {
-      const keyword = [request.missionObjective, ...request.capabilities].join(' ');
-      const details = await this.agent.browseAgents(keyword, {
-        sortBy: [AgentSort.SUCCESSFUL_JOB_COUNT, AgentSort.SUCCESS_RATE],
-        topK: Math.min(Math.max(request.limit ?? 5, 1), 20),
-        isOnline: OnlineStatus.ONLINE,
-        showHidden: false,
-        walletAddressToExclude: await this.agent.getAddress(),
-      });
-      return details.flatMap((detail) => {
-        const selected = chooseOffering(detail, request.capabilities);
-        return selected
-          ? [normalizeCandidate(detail, selected.offering, this.chainId, selected.compatibility)]
-          : [];
-      });
+      return await this.discovery.discoverCandidates(request);
     } catch (error) {
       throw new VirtualsProtocolError(
         'VIRTUALS_DISCOVERY_FAILED',

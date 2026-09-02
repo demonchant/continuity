@@ -1,6 +1,7 @@
 import type { Agent } from '../agents/agent.js';
 import type { MemoryCost } from '../memory/memory-record.js';
 import type { Mission } from '../missions/mission.js';
+import type { AcpEvidenceProvenance } from './evidence-hash.js';
 
 export type VerificationOutputFormat = 'json' | 'object' | 'array' | 'text';
 
@@ -19,6 +20,8 @@ export interface AgentResult {
   readonly providerReference?: string;
   readonly cost?: MemoryCost;
   readonly latencyMs?: number;
+  readonly evidenceHash?: string;
+  readonly provenance?: AcpEvidenceProvenance;
 }
 
 export interface VerificationRequest {
@@ -47,4 +50,6 @@ export interface VerificationReport {
   /** Present for production MemoryService writes; proof/live scripts fail closed if absent. */
   readonly sibylRecordId?: string;
   readonly sibylEventId?: string;
+  readonly evidenceHash?: string;
+  readonly provenance?: AcpEvidenceProvenance;
 }

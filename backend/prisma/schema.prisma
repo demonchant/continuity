@@ -35,39 +35,39 @@ enum MissionStatus {
 }
 
 model Mission {
-  id               String              @id @default(uuid()) @db.Uuid
-  objective        String              @db.Text
-  constraints      Json                @default("{}")
-  budget           Decimal             @db.Decimal(20, 8)
-  status           MissionStatus       @default(CREATED)
-  currentStep      String              @default("created") @db.VarChar(100)
-  transitions      MissionTransition[]
-  checkpoint       MissionCheckpoint?
-  actions          RecoveryAction[]
-  virtualsJobs     VirtualsJob[]
-  baseTransactions BaseTransaction[]
-  recoveryAudits   MissionRecoveryAudit[]
-  recoveryState    String?             @db.VarChar(100)
-  lastHeartbeat    DateTime?           @db.Timestamptz(3)
-  lastReconciliation DateTime?         @db.Timestamptz(3)
-  recoveryFailureReason String?         @db.VarChar(1000)
-  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime            @updatedAt @db.Timestamptz(3)
+  id                    String                 @id @default(uuid()) @db.Uuid
+  objective             String                 @db.Text
+  constraints           Json                   @default("{}")
+  budget                Decimal                @db.Decimal(20, 8)
+  status                MissionStatus          @default(CREATED)
+  currentStep           String                 @default("created") @db.VarChar(100)
+  transitions           MissionTransition[]
+  checkpoint            MissionCheckpoint?
+  actions               RecoveryAction[]
+  virtualsJobs          VirtualsJob[]
+  baseTransactions      BaseTransaction[]
+  recoveryAudits        MissionRecoveryAudit[]
+  recoveryState         String?                @db.VarChar(100)
+  lastHeartbeat         DateTime?              @db.Timestamptz(3)
+  lastReconciliation    DateTime?              @db.Timestamptz(3)
+  recoveryFailureReason String?                @db.VarChar(1000)
+  createdAt             DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime               @updatedAt @db.Timestamptz(3)
 
   @@index([status, updatedAt])
   @@index([createdAt, id])
 }
 
 model MissionRecoveryAudit {
-  id          String   @id @default(uuid()) @db.Uuid
-  missionId   String   @db.Uuid
-  mission     Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
-  workerId    String   @db.VarChar(200)
-  action      String   @db.VarChar(200)
-  status      String   @db.VarChar(50)
-  attempt     Int
-  details     Json     @default("{}")
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  id        String   @id @default(uuid()) @db.Uuid
+  missionId String   @db.Uuid
+  mission   Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  workerId  String   @db.VarChar(200)
+  action    String   @db.VarChar(200)
+  status    String   @db.VarChar(50)
+  attempt   Int
+  details   Json     @default("{}")
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([missionId, createdAt])
   @@index([status, createdAt])
@@ -148,8 +148,10 @@ model VirtualsJob {
   state           VirtualsJobState @default(CREATED)
   requirement     Json
   result          Json?
-    verification    Json?
-    lifecycle       Json?
+  verification    Json?
+  lifecycle       Json?
+  evidenceHash    String?          @db.VarChar(64)
+  provenance      Json?
   errorCode       String?          @db.VarChar(100)
   errorMessage    String?          @db.VarChar(500)
   createdAt       DateTime         @default(now()) @db.Timestamptz(3)
@@ -160,7 +162,8 @@ model VirtualsJob {
   @@unique([chainId, externalJobId])
   @@index([missionId, state, updatedAt])
   @@index([missionId, createdAt])
-  }
+  @@index([evidenceHash])
+}
 
 enum RecoveryActionStatus {
   INTENDED

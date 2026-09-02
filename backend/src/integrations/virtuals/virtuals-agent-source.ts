@@ -12,6 +12,7 @@ export interface VirtualsAgentCandidate {
   readonly agent: ExternalVirtualsAgent;
   readonly chainId: number;
   readonly providerAddress: string;
+  readonly offeringId?: string;
   readonly offeringName: string;
   readonly offeringRequirements: Record<string, unknown> | string;
   readonly compatibility?: OfferingCompatibility;

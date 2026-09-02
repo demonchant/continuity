@@ -151,6 +151,12 @@ describe('VirtualsExecutionService', () => {
       proposedBudget: { amount: '0.25', currency: 'USDC' },
     });
     expect(result.verification.passed).toBe(true);
+    expect(result.job.evidenceHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.job.provenance).toMatchObject({
+      algorithm: 'SHA-256',
+      acpJobId: 'job-99',
+      offeringId: 'research',
+    });
     expect(result.decision.selectedAgent.source).toBe('EXTERNAL_VIRTUALS');
     expect(source.createJob).toHaveBeenCalledOnce();
     expect(source.fundJob).toHaveBeenCalledOnce();
@@ -158,7 +164,11 @@ describe('VirtualsExecutionService', () => {
     expect(source.rejectJob).not.toHaveBeenCalled();
     expect(
       provider.records.some(
-        ({ category, agentProvider }) => category === 'experience' && agentProvider === 'virtuals',
+        ({ category, agentProvider, evidenceHash, provenance }) =>
+          category === 'experience' &&
+          agentProvider === 'virtuals' &&
+          /^[a-f0-9]{64}$/.test(evidenceHash ?? '') &&
+          provenance?.acpJobId === 'job-99',
       ),
     ).toBe(true);
   });

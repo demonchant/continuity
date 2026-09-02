@@ -46,6 +46,9 @@ const environmentSchema = z
     VIRTUALS_WALLET_ID: z.string().trim().min(1).optional(),
     VIRTUALS_SIGNER_PRIVATE_KEY: z.string().trim().min(1).optional(),
     VIRTUALS_BUILDER_CODE: z.string().trim().min(1).optional(),
+    VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN: z.string().trim().min(20).optional(),
+    VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN: z.string().trim().min(20).optional(),
+    VIRTUALS_DISCOVERY_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(15_000),
     VIRTUALS_CHAIN_ID: z.coerce.number().int().positive().default(8453),
     VIRTUALS_MAX_JOB_USDC: z.coerce.number().positive().default(1),
     VIRTUALS_POLL_INTERVAL_MS: z.coerce.number().int().min(250).default(5000),
@@ -109,6 +112,8 @@ const environmentSchema = z
         'VIRTUALS_WALLET_ADDRESS',
         'VIRTUALS_WALLET_ID',
         'VIRTUALS_SIGNER_PRIVATE_KEY',
+        'VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN',
+        'VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN',
         'VIRTUALS_OPERATOR_TOKEN',
       ] as const) {
         if (!value[key]) {

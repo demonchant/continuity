@@ -14,7 +14,10 @@ import { BasePaymentService } from './integrations/base/base-payment-service.js'
 import type { BaseTransactionGateway } from './integrations/base/base-gateway.js';
 import { PrismaBaseTransactionRepository } from './integrations/base/prisma-base-transaction-repository.js';
 import { PrismaVirtualsJobRepository } from './integrations/virtuals/prisma-virtuals-job-repository.js';
+import { PrismaVirtualsDiscoveryCredentialRepository } from './integrations/virtuals/prisma-virtuals-discovery-credential-repository.js';
 import type { VirtualsAcpAdapter } from './integrations/virtuals/virtuals-acp-adapter.js';
+import { EncryptedVirtualsDiscoveryCredentialStore } from './integrations/virtuals/virtuals-discovery-credential-store.js';
+import { VirtualsOAuthDiscoveryClient } from './integrations/virtuals/virtuals-discovery-client.js';
 import { VirtualsExecutionService } from './integrations/virtuals/virtuals-execution-service.js';
 import { MemoryService } from './memory/memory-service.js';
 import { MissionService } from './missions/mission-service.js';
@@ -77,23 +80,39 @@ async function main(): Promise<void> {
       !config.virtuals.signerPrivateKey ||
       !config.virtuals.discoveryAccessToken ||
       !config.virtuals.discoveryRefreshToken ||
+      !config.virtuals.discoveryCredentialKey ||
       !config.virtuals.operatorToken
     ) {
       throw new Error('Validated Virtuals configuration is incomplete');
     }
     const { VirtualsAcpAdapter } = await import('./integrations/virtuals/virtuals-acp-adapter.js');
-    virtualsAdapter = await VirtualsAcpAdapter.create({
-      walletAddress: config.virtuals.walletAddress,
-      walletId: config.virtuals.walletId,
-      signerPrivateKey: config.virtuals.signerPrivateKey,
+    const durableDiscovery = await EncryptedVirtualsDiscoveryCredentialStore.initialize(
+      new PrismaVirtualsDiscoveryCredentialRepository(prisma),
+      config.virtuals.discoveryCredentialKey,
+      {
+        accessToken: config.virtuals.discoveryAccessToken,
+        refreshToken: config.virtuals.discoveryRefreshToken,
+      },
+    );
+    const discovery = new VirtualsOAuthDiscoveryClient({
+      credentials: durableDiscovery.credentials,
+      credentialPersistence: durableDiscovery.store,
       chainId: config.virtuals.chainId,
-      discoveryAccessToken: config.virtuals.discoveryAccessToken,
-      discoveryRefreshToken: config.virtuals.discoveryRefreshToken,
+      walletAddressToExclude: config.virtuals.walletAddress,
       ...(config.virtuals.discoveryTimeoutMs
-        ? { discoveryTimeoutMs: config.virtuals.discoveryTimeoutMs }
+        ? { timeoutMs: config.virtuals.discoveryTimeoutMs }
         : {}),
-      ...(config.virtuals.builderCode ? { builderCode: config.virtuals.builderCode } : {}),
     });
+    virtualsAdapter = await VirtualsAcpAdapter.create(
+      {
+        walletAddress: config.virtuals.walletAddress,
+        walletId: config.virtuals.walletId,
+        signerPrivateKey: config.virtuals.signerPrivateKey,
+        chainId: config.virtuals.chainId,
+        ...(config.virtuals.builderCode ? { builderCode: config.virtuals.builderCode } : {}),
+      },
+      discovery,
+    );
     virtualsExecution = new VirtualsExecutionService(
       virtualsAdapter,
       virtualsJobs,
@@ -113,7 +132,11 @@ async function main(): Promise<void> {
       operatorToken: config.virtuals.operatorToken,
     };
     logger.info(
-      { event: 'virtuals.integration.enabled', chainId: config.virtuals.chainId },
+      {
+        event: 'virtuals.integration.enabled',
+        chainId: config.virtuals.chainId,
+        discoveryCredentialSource: durableDiscovery.source,
+      },
       'Official Virtuals ACP execution integration enabled',
     );
   }

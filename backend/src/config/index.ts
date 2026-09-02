@@ -38,6 +38,7 @@ export interface ApplicationConfig {
     readonly builderCode?: string;
     readonly discoveryAccessToken?: string;
     readonly discoveryRefreshToken?: string;
+    readonly discoveryCredentialKey?: string;
     readonly discoveryTimeoutMs?: number;
     readonly chainId: number;
     readonly maxJobUsdc: number;
@@ -115,6 +116,9 @@ export function loadConfig(input: NodeJS.ProcessEnv = process.env): ApplicationC
         : {}),
       ...(environment.VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN
         ? { discoveryRefreshToken: environment.VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN }
+        : {}),
+      ...(environment.VIRTUALS_DISCOVERY_CREDENTIAL_KEY
+        ? { discoveryCredentialKey: environment.VIRTUALS_DISCOVERY_CREDENTIAL_KEY }
         : {}),
       discoveryTimeoutMs: environment.VIRTUALS_DISCOVERY_TIMEOUT_MS,
       chainId: environment.VIRTUALS_CHAIN_ID,

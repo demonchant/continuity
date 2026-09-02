@@ -47,11 +47,14 @@ services:
         sync: false
       - key: VIRTUALS_OPERATOR_TOKEN
         sync: false
-      # OAuth bearer credentials are consumed only by read-only agent discovery.
-      # Add/rotate both values manually in Render; never commit their values.
+      # OAuth values bootstrap/recover encrypted PostgreSQL discovery state only.
+      # They are never used for ACP execution and never overwrite healthy durable state.
       - key: VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN
         sync: false
       - key: VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN
+        sync: false
+      # Base64-encoded 32-byte AES key used only for encrypted discovery credentials.
+      - key: VIRTUALS_DISCOVERY_CREDENTIAL_KEY
         sync: false
       - key: VIRTUALS_DISCOVERY_TIMEOUT_MS
         value: '15000'

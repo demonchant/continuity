@@ -165,6 +165,18 @@ model VirtualsJob {
   @@index([evidenceHash])
 }
 
+model VirtualsDiscoveryCredential {
+  id                   String    @id @db.VarChar(100)
+  ciphertext           Bytes
+  iv                   Bytes
+  authenticationTag    Bytes
+  encryptionVersion    Int
+  revision             Int       @default(1)
+  accessTokenExpiresAt DateTime? @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
+}
+
 enum RecoveryActionStatus {
   INTENDED
   IN_PROGRESS

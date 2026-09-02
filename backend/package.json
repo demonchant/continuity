@@ -23,6 +23,7 @@
     "test:watch": "vitest",
     "sibyl:smoke": "npm run build && node scripts/sibyl-cross-process-smoke.mjs",
     "virtuals:smoke": "node scripts/virtuals-live-smoke.mjs",
+    "virtuals:discovery-credentials:reset": "node dist/scripts/reset-virtuals-discovery-credentials.js",
     "base:smoke": "node scripts/base-live-smoke.mjs",
     "economic:smoke": "node scripts/economic-live-smoke.mjs",
     "runner:smoke": "node scripts/mission-runner-live-smoke.mjs",

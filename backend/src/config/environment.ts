@@ -48,6 +48,11 @@ const environmentSchema = z
     VIRTUALS_BUILDER_CODE: z.string().trim().min(1).optional(),
     VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN: z.string().trim().min(20).optional(),
     VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN: z.string().trim().min(20).optional(),
+    VIRTUALS_DISCOVERY_CREDENTIAL_KEY: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9+/]{43}=$/, 'must be a canonical base64-encoded 32-byte key')
+      .optional(),
     VIRTUALS_DISCOVERY_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(15_000),
     VIRTUALS_CHAIN_ID: z.coerce.number().int().positive().default(8453),
     VIRTUALS_MAX_JOB_USDC: z.coerce.number().positive().default(1),
@@ -114,6 +119,7 @@ const environmentSchema = z
         'VIRTUALS_SIGNER_PRIVATE_KEY',
         'VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN',
         'VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN',
+        'VIRTUALS_DISCOVERY_CREDENTIAL_KEY',
         'VIRTUALS_OPERATOR_TOKEN',
       ] as const) {
         if (!value[key]) {

@@ -108,7 +108,7 @@ describe('environment validation', () => {
 
   it('requires the complete official ACP credential set when Virtuals is enabled', () => {
     expect(() => parseEnvironment({ ...validEnvironment, VIRTUALS_ENABLED: 'true' })).toThrow(
-      /VIRTUALS_WALLET_ADDRESS.*VIRTUALS_WALLET_ID.*VIRTUALS_SIGNER_PRIVATE_KEY.*VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN.*VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN.*VIRTUALS_OPERATOR_TOKEN/,
+      /VIRTUALS_WALLET_ADDRESS.*VIRTUALS_WALLET_ID.*VIRTUALS_SIGNER_PRIVATE_KEY.*VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN.*VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN.*VIRTUALS_DISCOVERY_CREDENTIAL_KEY.*VIRTUALS_OPERATOR_TOKEN/,
     );
 
     expect(
@@ -120,9 +120,19 @@ describe('environment validation', () => {
         VIRTUALS_SIGNER_PRIVATE_KEY: 'signer-private-key',
         VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN: 'oauth-access-token-at-least-20-characters',
         VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN: 'oauth-refresh-token-at-least-20-characters',
+        VIRTUALS_DISCOVERY_CREDENTIAL_KEY: Buffer.alloc(32, 7).toString('base64'),
         VIRTUALS_OPERATOR_TOKEN: 'operator-token-at-least-20-characters',
       }).VIRTUALS_ENABLED,
     ).toBe(true);
+  });
+
+  it('requires a canonical base64-encoded 32-byte discovery credential key', () => {
+    expect(() =>
+      parseEnvironment({
+        ...validEnvironment,
+        VIRTUALS_DISCOVERY_CREDENTIAL_KEY: 'not-a-key',
+      }),
+    ).toThrow(/VIRTUALS_DISCOVERY_CREDENTIAL_KEY.*canonical base64-encoded 32-byte key/);
   });
 
   it('requires secure payment configuration and explicit mainnet opt-in for Base', () => {

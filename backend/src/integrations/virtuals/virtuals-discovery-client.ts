@@ -6,6 +6,10 @@ import type {
   VirtualsAgentDiscoveryRequest,
 } from './virtuals-agent-source.js';
 import { VirtualsProtocolError } from './virtuals-errors.js';
+import type {
+  VirtualsDiscoveryCredentialPersistence,
+  VirtualsDiscoveryCredentials,
+} from './virtuals-discovery-credential-store.js';
 import {
   analyzeOfferingCompatibility,
   type OfferingCompatibility,
@@ -84,8 +88,8 @@ type SearchAgent = z.infer<typeof agentSchema>;
 type SearchOffering = z.infer<typeof offeringSchema>;
 
 export interface VirtualsDiscoveryConfiguration {
-  readonly accessToken: string;
-  readonly refreshToken: string;
+  readonly credentials: VirtualsDiscoveryCredentials;
+  readonly credentialPersistence: VirtualsDiscoveryCredentialPersistence;
   readonly chainId: number;
   readonly walletAddressToExclude: string;
   readonly timeoutMs?: number;
@@ -200,12 +204,13 @@ function safeStatus(error: unknown): number | undefined {
 export class VirtualsOAuthDiscoveryClient implements VirtualsDiscoveryClient {
   private accessToken: string;
   private refreshToken: string;
+  private refreshPromise: Promise<void> | undefined;
   private readonly timeoutMs: number;
   private readonly fetcher: typeof fetch;
 
   constructor(private readonly configuration: VirtualsDiscoveryConfiguration) {
-    this.accessToken = configuration.accessToken;
-    this.refreshToken = configuration.refreshToken;
+    this.accessToken = configuration.credentials.accessToken;
+    this.refreshToken = configuration.credentials.refreshToken;
     this.timeoutMs = configuration.timeoutMs ?? 15_000;
     this.fetcher = configuration.fetch ?? fetch;
   }
@@ -282,9 +287,10 @@ export class VirtualsOAuthDiscoveryClient implements VirtualsDiscoveryClient {
     url.searchParams.set('showHidden', 'false');
     url.searchParams.set('walletAddressToExclude', this.configuration.walletAddressToExclude);
     url.searchParams.set('sortBy', 'successfulJobCount,successRate');
+    const rejectedAccessToken = this.accessToken;
     let response = await this.authorizedGet(url);
     if (response.status === 401 || response.status === 403) {
-      await this.refresh();
+      await this.refresh(rejectedAccessToken);
       response = await this.authorizedGet(url);
     }
     if (!response.ok) throw new SafeHttpError(response.status);
@@ -299,7 +305,15 @@ export class VirtualsOAuthDiscoveryClient implements VirtualsDiscoveryClient {
     });
   }
 
-  private async refresh(): Promise<void> {
+  private refresh(rejectedAccessToken: string): Promise<void> {
+    if (this.accessToken !== rejectedAccessToken) return Promise.resolve();
+    this.refreshPromise ??= this.performRefresh().finally(() => {
+      this.refreshPromise = undefined;
+    });
+    return this.refreshPromise;
+  }
+
+  private async performRefresh(): Promise<void> {
     const response = await this.fetcher(new URL('/auth/cli/refresh', VIRTUALS_API_URL), {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
@@ -319,6 +333,18 @@ export class VirtualsOAuthDiscoveryClient implements VirtualsDiscoveryClient {
       | { readonly token: string; readonly refreshToken: string }
       | { readonly data: { readonly token: string; readonly refreshToken: string } };
     const credentials = 'data' in payload ? payload.data : payload;
+    try {
+      await this.configuration.credentialPersistence.persistRotated({
+        accessToken: credentials.token,
+        refreshToken: credentials.refreshToken,
+      });
+    } catch {
+      throw new VirtualsProtocolError(
+        'VIRTUALS_DISCOVERY_FAILED',
+        'Rotated Virtuals discovery credentials could not be persisted',
+        true,
+      );
+    }
     this.accessToken = credentials.token;
     this.refreshToken = credentials.refreshToken;
   }

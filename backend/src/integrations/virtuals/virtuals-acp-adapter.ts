@@ -15,10 +15,7 @@ import type {
   VirtualsJobState,
 } from './virtuals-agent-source.js';
 import { VirtualsProtocolError } from './virtuals-errors.js';
-import {
-  VirtualsOAuthDiscoveryClient,
-  type VirtualsDiscoveryClient,
-} from './virtuals-discovery-client.js';
+import { type VirtualsDiscoveryClient } from './virtuals-discovery-client.js';
 
 export interface VirtualsAcpConfiguration {
   readonly walletAddress: `0x${string}`;
@@ -26,9 +23,6 @@ export interface VirtualsAcpConfiguration {
   readonly signerPrivateKey: string;
   readonly chainId: number;
   readonly builderCode?: string;
-  readonly discoveryAccessToken: string;
-  readonly discoveryRefreshToken: string;
-  readonly discoveryTimeoutMs?: number;
 }
 
 export interface VirtualsAcpAgentClient {
@@ -97,7 +91,10 @@ export class VirtualsAcpAdapter implements VirtualsAgentSource {
     private readonly discovery: VirtualsDiscoveryClient,
   ) {}
 
-  static async create(configuration: VirtualsAcpConfiguration): Promise<VirtualsAcpAdapter> {
+  static async create(
+    configuration: VirtualsAcpConfiguration,
+    discovery: VirtualsDiscoveryClient,
+  ): Promise<VirtualsAcpAdapter> {
     const chain = getEvmChainByChainId(configuration.chainId);
     if (!chain) {
       throw new VirtualsProtocolError(
@@ -116,15 +113,7 @@ export class VirtualsAcpAdapter implements VirtualsAgentSource {
     return new VirtualsAcpAdapter(
       await AcpAgent.create({ evmProvider: provider }),
       configuration.chainId,
-      new VirtualsOAuthDiscoveryClient({
-        accessToken: configuration.discoveryAccessToken,
-        refreshToken: configuration.discoveryRefreshToken,
-        chainId: configuration.chainId,
-        walletAddressToExclude: configuration.walletAddress,
-        ...(configuration.discoveryTimeoutMs
-          ? { timeoutMs: configuration.discoveryTimeoutMs }
-          : {}),
-      }),
+      discovery,
     );
   }
 

@@ -3,8 +3,6 @@ dist/
 coverage/
 .env
 .env.*
-!.env.example
-!.env.production.example
 *.log
 .DS_Store
 .idea/
@@ -13,3 +11,17 @@ coverage/
 .sibyl-demo-venv/
 .tmp-playwright/
 .tmp-playwright-*.png
+
+# Local-only documentation and release artifacts
+/DEMO.md
+/DEMO_RUNBOOK.md
+/DEPLOYMENT.md
+/FINAL_BASELINE.md
+/FINAL_JUDGE_AUDIT.md
+/FINAL_RELEASE_REPORT.md
+/JUDGING.md
+/PHASE17_FINAL_REPORT.md
+/PRODUCTION_CHECKLIST.md
+/ROADMAP.md
+/SUBMISSION_CHECKLIST.md
+/SUBMISSION_CHECKLIST_FINAL.md

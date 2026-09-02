@@ -3,6 +3,15 @@ import { z } from 'zod';
 
 const logLevelSchema = z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']);
 const booleanString = z.enum(['true', 'false']).transform((value) => value === 'true');
+const encodedCredentialKeyPattern = /^(?:[A-Za-z0-9+/]{43}=?|[A-Za-z0-9_-]{43}=?|[0-9a-fA-F]{64})$/;
+
+function normalizeSecretInput(value: string): string {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  return trimmed.length >= 2 && (quote === '"' || quote === "'") && trimmed.at(-1) === quote
+    ? trimmed.slice(1, -1).trim()
+    : trimmed;
+}
 
 const environmentSchema = z
   .object({
@@ -50,8 +59,11 @@ const environmentSchema = z
     VIRTUALS_DISCOVERY_OAUTH_REFRESH_TOKEN: z.string().trim().min(20).optional(),
     VIRTUALS_DISCOVERY_CREDENTIAL_KEY: z
       .string()
-      .trim()
-      .regex(/^[A-Za-z0-9+/]{43}=$/, 'must be a canonical base64-encoded 32-byte key')
+      .transform(normalizeSecretInput)
+      .refine(
+        (value) => encodedCredentialKeyPattern.test(value),
+        'must encode exactly 32 bytes as base64, base64url, or 64-character hex',
+      )
       .optional(),
     VIRTUALS_DISCOVERY_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(15_000),
     VIRTUALS_CHAIN_ID: z.coerce.number().int().positive().default(8453),

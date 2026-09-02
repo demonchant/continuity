@@ -67,9 +67,23 @@ function associatedData(id: string, version: number): Buffer {
 }
 
 export function decodeCredentialEncryptionKey(encoded: string): Buffer {
-  if (!/^[A-Za-z0-9+/]{43}=$/.test(encoded)) throw safeConfigurationError();
-  const key = Buffer.from(encoded, 'base64');
-  if (key.length !== 32 || key.toString('base64') !== encoded) throw safeConfigurationError();
+  const trimmed = encoded.trim();
+  const quote = trimmed[0];
+  const value =
+    trimmed.length >= 2 && (quote === '"' || quote === "'") && trimmed.at(-1) === quote
+      ? trimmed.slice(1, -1).trim()
+      : trimmed;
+
+  if (/^[0-9a-fA-F]{64}$/.test(value)) return Buffer.from(value, 'hex');
+  if (!/^(?:[A-Za-z0-9+/]{43}=?|[A-Za-z0-9_-]{43}=?)$/.test(value)) {
+    throw safeConfigurationError();
+  }
+
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/').replace(/=$/, '');
+  const key = Buffer.from(`${normalized}=`, 'base64');
+  if (key.length !== 32 || key.toString('base64').replace(/=$/, '') !== normalized) {
+    throw safeConfigurationError();
+  }
   return key;
 }
 

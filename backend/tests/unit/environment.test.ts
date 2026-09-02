@@ -126,13 +126,31 @@ describe('environment validation', () => {
     ).toBe(true);
   });
 
-  it('requires a canonical base64-encoded 32-byte discovery credential key', () => {
+  it('accepts supported 32-byte discovery credential key encodings', () => {
+    const raw = Buffer.alloc(32, 9);
+    for (const encoded of [
+      raw.toString('base64'),
+      raw.toString('base64').replace(/=$/, ''),
+      raw.toString('base64url'),
+      raw.toString('hex'),
+      `"${raw.toString('base64')}"`,
+    ]) {
+      expect(
+        parseEnvironment({
+          ...validEnvironment,
+          VIRTUALS_DISCOVERY_CREDENTIAL_KEY: encoded,
+        }).VIRTUALS_DISCOVERY_CREDENTIAL_KEY,
+      ).toBe(encoded.replace(/^"|"$/g, ''));
+    }
+  });
+
+  it('rejects a discovery credential key that does not encode 32 bytes', () => {
     expect(() =>
       parseEnvironment({
         ...validEnvironment,
         VIRTUALS_DISCOVERY_CREDENTIAL_KEY: 'not-a-key',
       }),
-    ).toThrow(/VIRTUALS_DISCOVERY_CREDENTIAL_KEY.*canonical base64-encoded 32-byte key/);
+    ).toThrow(/VIRTUALS_DISCOVERY_CREDENTIAL_KEY.*must encode exactly 32 bytes/);
   });
 
   it('requires secure payment configuration and explicit mainnet opt-in for Base', () => {

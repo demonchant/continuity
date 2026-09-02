@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
+  decodeCredentialEncryptionKey,
   EncryptedVirtualsDiscoveryCredentialStore,
   virtualsDiscoveryCredentialId,
   type VirtualsDiscoveryCredentialRecord,
@@ -54,6 +55,22 @@ class MemoryCredentialRepository implements VirtualsDiscoveryCredentialRepositor
 }
 
 describe('EncryptedVirtualsDiscoveryCredentialStore', () => {
+  it('decodes common lossless 32-byte key representations', () => {
+    const raw = randomBytes(32);
+    for (const encoded of [
+      raw.toString('base64'),
+      raw.toString('base64').replace(/=$/, ''),
+      raw.toString('base64url'),
+      raw.toString('hex'),
+      `'${raw.toString('base64')}'`,
+    ]) {
+      expect(decodeCredentialEncryptionKey(encoded)).toEqual(raw);
+    }
+    expect(() => decodeCredentialEncryptionKey('not-a-32-byte-key')).toThrow(
+      'Durable Virtuals discovery credentials are unavailable',
+    );
+  });
+
   it('bootstraps once from environment input and encrypts tokens at rest', async () => {
     const repository = new MemoryCredentialRepository();
     const initialized = await EncryptedVirtualsDiscoveryCredentialStore.initialize(

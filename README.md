@@ -18,6 +18,10 @@ Sibyl is the production source of historical experience used by the decision eng
 
 ## Judge Quick Start
 
+For the complete production user, administrator, payment, recovery, and
+screen-recording sequence, see
+[`docs/PRODUCTION_END_TO_END_WORKFLOW.md`](docs/PRODUCTION_END_TO_END_WORKFLOW.md).
+
 Sibyl WRITE: [`backend/src/memory/memory-service.ts`](backend/src/memory/memory-service.ts)
 
 Sibyl READ: [`backend/src/memory/decision-memory-context.ts`](backend/src/memory/decision-memory-context.ts)
@@ -118,9 +122,13 @@ Container, PostgreSQL, HTTPS, migrations, health checks, and secret handling are
 
 [`PMF.md`](PMF.md) is an evidence ledger. As of its last review it contains no verified external testers, design partners, production users, or waitlist entries. No PMF claim is made from empty evidence.
 
-## Prior Work Declaration
+## Current Production Deployment
 
-The repository documents a pre-existing backend foundation and later mission, memory, integration, dashboard, recovery, and hardening work. It distinguishes implemented code, automated tests, and credential-gated live tests. This workspace has no `.git` directory, so genuine commit history and public repository state cannot be verified here; no synthetic history is claimed.
+The application is deployed at `https://continuity-yj3l.onrender.com`. Public
+deployment and access-system claims are verified separately from the still
+pending funded ACP/Base mission receipt. See
+[`docs/PRODUCTION_END_TO_END_WORKFLOW.md`](docs/PRODUCTION_END_TO_END_WORKFLOW.md)
+for the dated completion state and operating sequence.
 
 ## License
 

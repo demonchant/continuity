@@ -16,6 +16,7 @@ const dashboardPages = [
   '/dashboard/memory',
   '/dashboard/activity',
   '/dashboard/judge',
+  '/dashboard/access',
   '/dashboard/missions/:id',
 ];
 

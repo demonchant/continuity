@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../shared/http/async-handler.js';
 import { validateBody } from '../shared/http/validation.js';
 import { betaRoles, type BetaSignupRepository } from './beta-signup.js';
+import type { AccessNotificationService } from '../access/access-notifications.js';
 
 const betaSignupSchema = z
   .object({
@@ -30,14 +31,17 @@ const betaSignupSchema = z
     }
   });
 
-export function createBetaSignupRouter(repository: BetaSignupRepository): Router {
+export function createBetaSignupRouter(
+  repository: BetaSignupRepository,
+  notifications?: AccessNotificationService,
+): Router {
   const router = Router();
   router.post(
     '/',
     validateBody(betaSignupSchema),
     asyncHandler(async (request, response) => {
       const input = request.body as z.infer<typeof betaSignupSchema>;
-      await repository.upsert({
+      const record = await repository.upsert({
         email: input.email,
         role: input.role,
         consentToContact: input.consentToContact,
@@ -45,6 +49,7 @@ export function createBetaSignupRouter(repository: BetaSignupRepository): Router
         ...(input.workflow ? { workflow: input.workflow } : {}),
         ...(input.attributionName ? { attributionName: input.attributionName } : {}),
       });
+      await notifications?.notifyNewRequest(record);
       response.status(202).json({
         success: true,
         data: { message: 'Thanks. Your private beta request has been recorded.' },

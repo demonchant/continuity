@@ -109,6 +109,33 @@ describe('MemoryService', () => {
     expect(result.records[0]?.sibylRecordId).toBe('sibyl-entity-77');
   });
 
+  it("never returns another organization's Sibyl records to a tenant recall", async () => {
+    const provider = new MockMemoryProvider();
+    const record = (id: string, organizationId: string): MemoryRecord => ({
+      schemaVersion: 1,
+      id,
+      category: 'experience',
+      timestamp: now.toISOString(),
+      missionId: `mission-${id}`,
+      organizationId,
+      mission: 'Analyze market data',
+      capability: 'analysis',
+      success: true,
+    });
+    provider.searchResult = [
+      { record: record('a', 'organization-a'), sibylRecordId: 'sibyl-a', sibylTier: 'entity' },
+      { record: record('b', 'organization-b'), sibylRecordId: 'sibyl-b', sibylTier: 'entity' },
+    ];
+
+    const result = await new MemoryService(provider, quietLogger()).recall({
+      mission: 'Analyze a new market',
+      capabilities: ['analysis'],
+      organizationId: 'organization-a',
+    });
+
+    expect(result.records.map(({ sibylRecordId }) => sibylRecordId)).toEqual(['sibyl-a']);
+  });
+
   it('logs write, read, and result metadata without logging memory bodies', async () => {
     let output = '';
     const stream = new Writable({

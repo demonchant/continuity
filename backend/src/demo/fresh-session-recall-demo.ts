@@ -50,6 +50,7 @@ class SessionMissionRepository implements MissionRepository {
     const now = new Date();
     const mission: Mission = {
       id: randomUUID(),
+      ...(input.organizationId ? { organizationId: input.organizationId } : {}),
       objective: input.objective,
       constraints: input.constraints,
       budget: input.budget,
@@ -64,6 +65,12 @@ class SessionMissionRepository implements MissionRepository {
 
   findAll(): Promise<readonly Mission[]> {
     return Promise.resolve([...this.missions.values()]);
+  }
+
+  findAllByOrganizationId(organizationId: string): Promise<readonly Mission[]> {
+    return Promise.resolve(
+      [...this.missions.values()].filter((mission) => mission.organizationId === organizationId),
+    );
   }
 
   findById(id: string): Promise<Mission | null> {

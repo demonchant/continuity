@@ -13,6 +13,7 @@ export class InMemoryMissionRepository implements MissionRepository {
     const now = new Date();
     const mission: Mission = {
       id: randomUUID(),
+      ...(input.organizationId ? { organizationId: input.organizationId } : {}),
       objective: input.objective,
       constraints: input.constraints,
       budget: input.budget,
@@ -30,6 +31,12 @@ export class InMemoryMissionRepository implements MissionRepository {
       [...this.missions.values()].sort(
         (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
       ),
+    );
+  }
+
+  findAllByOrganizationId(organizationId: string): Promise<readonly Mission[]> {
+    return Promise.resolve(
+      [...this.missions.values()].filter((mission) => mission.organizationId === organizationId),
     );
   }
 

@@ -19,6 +19,18 @@ export class MissionService {
     return (await this.repository.findAll()).map((mission) => this.assertIntegrity(mission));
   }
 
+  async listForOrganization(organizationId: string): Promise<readonly Mission[]> {
+    return (await this.repository.findAllByOrganizationId(organizationId)).map((mission) =>
+      this.assertIntegrity(mission),
+    );
+  }
+
+  async getForOrganization(id: string, organizationId: string): Promise<Mission> {
+    const mission = await this.get(id);
+    if (mission.organizationId !== organizationId) throw this.notFound(id);
+    return mission;
+  }
+
   async get(id: string): Promise<Mission> {
     const mission = await this.repository.findById(id);
     if (!mission) throw this.notFound(id);

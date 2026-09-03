@@ -25,7 +25,7 @@ export interface AgentResult {
 }
 
 export interface VerificationRequest {
-  readonly mission: Pick<Mission, 'id' | 'objective' | 'constraints'>;
+  readonly mission: Pick<Mission, 'id' | 'objective' | 'constraints' | 'organizationId'>;
   readonly agent: Pick<Agent, 'id' | 'provider'>;
   readonly capability: string;
   readonly result: AgentResult;

@@ -93,6 +93,7 @@ export class MissionRunner {
     try {
       preflightMemory = await this.memory.recall({
         mission: mission.objective,
+        ...(mission.organizationId ? { organizationId: mission.organizationId } : {}),
         capabilities: plan.capabilities,
         categories: ['outcome', 'failure', 'experience'],
         limit: 50,
@@ -294,6 +295,7 @@ export class MissionRunner {
       try {
         await this.memory.recordOutcome({
           missionId: mission.id,
+          ...(mission.organizationId ? { organizationId: mission.organizationId } : {}),
           mission: mission.objective,
           agentId: execution.decision.selectedAgent.id,
           agentProvider: execution.decision.selectedAgent.provider,
@@ -480,6 +482,7 @@ export class MissionRunner {
     try {
       await this.memory.recordFailure({
         missionId: failed.id,
+        ...(failed.organizationId ? { organizationId: failed.organizationId } : {}),
         mission: failed.objective,
         capability: plan.capabilities.join(','),
         result: 'Autonomous mission terminated without a verified completion.',

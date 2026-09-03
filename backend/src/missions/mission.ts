@@ -25,6 +25,7 @@ export type JsonObject = { readonly [key: string]: JsonValue };
 
 export interface Mission {
   readonly id: string;
+  readonly organizationId?: string;
   readonly objective: string;
   readonly constraints: JsonObject;
   readonly budget: string;
@@ -39,6 +40,7 @@ export interface Mission {
 }
 
 export interface CreateMissionInput {
+  readonly organizationId?: string;
   readonly objective: string;
   readonly constraints: JsonObject;
   readonly budget: string;

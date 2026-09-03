@@ -33,6 +33,12 @@ const environmentSchema = z
       )
       .pipe(z.array(z.string().url()).max(20)),
     CONTINUITY_OPERATOR_TOKEN: z.string().min(20).optional(),
+    PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
+    ACCESS_INVITE_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(72),
+    ACCESS_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(168),
+    RESEND_API_KEY: z.string().trim().min(20).optional(),
+    ACCESS_EMAIL_FROM: z.string().trim().min(3).optional(),
+    BETA_ADMIN_EMAIL: z.string().trim().email().optional(),
     RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(60_000),
     RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().min(1).max(10_000).default(120),
     DATABASE_URL: z
@@ -122,6 +128,15 @@ const environmentSchema = z
         code: z.ZodIssueCode.custom,
         path: ['CONTINUITY_OPERATOR_TOKEN'],
         message: 'is required in production to protect mission and dashboard operations',
+      });
+    }
+    const emailValues = [value.RESEND_API_KEY, value.ACCESS_EMAIL_FROM, value.BETA_ADMIN_EMAIL];
+    if (emailValues.some(Boolean) && !emailValues.every(Boolean)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['RESEND_API_KEY'],
+        message:
+          'RESEND_API_KEY, ACCESS_EMAIL_FROM, and BETA_ADMIN_EMAIL must be configured together',
       });
     }
     if (value.VIRTUALS_ENABLED) {

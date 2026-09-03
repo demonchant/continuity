@@ -14,6 +14,7 @@ function toDomainMission(record: PrismaMission): Mission {
 
   return {
     id: record.id,
+    ...(record.organizationId ? { organizationId: record.organizationId } : {}),
     objective: record.objective,
     constraints: record.constraints as JsonObject,
     budget: record.budget.toString(),
@@ -38,6 +39,7 @@ export class PrismaMissionRepository implements MissionRepository {
       const mission = await transaction.mission.create({
         data: {
           objective: input.objective,
+          ...(input.organizationId ? { organizationId: input.organizationId } : {}),
           constraints: input.constraints,
           budget: new Prisma.Decimal(input.budget),
           currentStep: 'created',
@@ -60,6 +62,14 @@ export class PrismaMissionRepository implements MissionRepository {
 
   async findAll(): Promise<readonly Mission[]> {
     const records = await this.client.mission.findMany({
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+    });
+    return records.map(toDomainMission);
+  }
+
+  async findAllByOrganizationId(organizationId: string): Promise<readonly Mission[]> {
+    const records = await this.client.mission.findMany({
+      where: { organizationId },
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     });
     return records.map(toDomainMission);

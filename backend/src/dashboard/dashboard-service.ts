@@ -348,12 +348,14 @@ export class DashboardService {
     const [decisionRecall, missionRecall, jobs, transactions, approvals] = await Promise.all([
       this.memory.recall({
         mission: mission.objective,
+        ...(mission.organizationId ? { organizationId: mission.organizationId } : {}),
         capabilities,
         categories,
         limit: 50,
       }),
       this.memory.recall({
         mission: mission.objective,
+        ...(mission.organizationId ? { organizationId: mission.organizationId } : {}),
         capabilities: [],
         categories,
         limit: 50,

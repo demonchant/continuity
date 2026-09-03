@@ -35,6 +35,14 @@ import type { HealthService } from './health/health-service.js';
 import type { ReadinessService } from './health/readiness-service.js';
 import { createErrorHandler, createNotFoundHandler } from './middleware/error-handler.js';
 import { fixedWindowRateLimit } from './middleware/rate-limit.js';
+import {
+  createAccessAdminRouter,
+  createAccessRouter,
+  createAccessUiRouter,
+} from '../access/access-routes.js';
+import type { AccessService } from '../access/access-service.js';
+import type { AccessNotificationService } from '../access/access-notifications.js';
+import { createPortalRouter } from '../access/portal-routes.js';
 
 export interface ApplicationDependencies {
   readonly config: ApplicationConfig;
@@ -43,6 +51,10 @@ export interface ApplicationDependencies {
   readonly readinessService?: ReadinessService;
   readonly missionService: MissionService;
   readonly betaSignups?: BetaSignupRepository;
+  readonly access?: {
+    readonly service: AccessService;
+    readonly notifications: AccessNotificationService;
+  };
   readonly virtuals?: {
     readonly execution: VirtualsExecutionService;
     readonly jobs: VirtualsJobRepository;
@@ -137,7 +149,28 @@ export function createApp(dependencies: ApplicationDependencies) {
   }
 
   if (dependencies.betaSignups) {
-    app.use('/api/v1/beta-signups', createBetaSignupRouter(dependencies.betaSignups));
+    app.use(
+      '/api/v1/beta-signups',
+      createBetaSignupRouter(dependencies.betaSignups, dependencies.access?.notifications),
+    );
+  }
+  if (dependencies.access) {
+    app.use(
+      '/api/v1/access',
+      createAccessRouter(
+        dependencies.access.service,
+        dependencies.config.runtime.environment === 'production',
+      ),
+    );
+    if (dependencies.config.security?.operatorToken) {
+      app.use(
+        '/api/v1/access-admin',
+        createAccessAdminRouter(
+          dependencies.access.service,
+          dependencies.config.security.operatorToken,
+        ),
+      );
+    }
   }
 
   const missionRouter = createMissionRouter(
@@ -204,6 +237,30 @@ export function createApp(dependencies: ApplicationDependencies) {
       createDashboardApiRouter(dependencies.dashboard, dependencies.config.security?.operatorToken),
     );
     app.use(createDashboardUiRouter());
+  }
+  if (dependencies.access && dependencies.dashboard) {
+    app.use(
+      '/api/v1/portal',
+      createPortalRouter({
+        access: dependencies.access.service,
+        missions: dependencies.missionService,
+        dashboard: dependencies.dashboard,
+        ...(dependencies.virtuals
+          ? { virtuals: dependencies.virtuals.execution, jobs: dependencies.virtuals.jobs }
+          : {}),
+        ...(dependencies.runner
+          ? {
+              worker: dependencies.runner.service,
+              approvals: dependencies.runner.approvals,
+              runnerCaps: dependencies.runner.runnerCaps,
+              ...(dependencies.runner.basePayments
+                ? { basePayments: dependencies.runner.basePayments }
+                : {}),
+            }
+          : {}),
+      }),
+    );
+    app.use(createAccessUiRouter());
   }
 
   app.use(createNotFoundHandler());

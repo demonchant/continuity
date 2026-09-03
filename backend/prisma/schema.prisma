@@ -8,15 +8,19 @@ datasource db {
 }
 
 model BetaSignup {
-  id                       String   @id @default(uuid()) @db.Uuid
-  email                    String   @unique @db.VarChar(320)
-  role                     String   @db.VarChar(50)
-  workflow                 String?  @db.Text
+  id                       String             @id @default(uuid()) @db.Uuid
+  email                    String             @unique @db.VarChar(320)
+  role                     String             @db.VarChar(50)
+  workflow                 String?            @db.Text
   consentToContact         Boolean
-  publicAttributionConsent Boolean  @default(false)
-  attributionName          String?  @db.VarChar(120)
-  createdAt                DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt                DateTime @updatedAt @db.Timestamptz(3)
+  publicAttributionConsent Boolean            @default(false)
+  attributionName          String?            @db.VarChar(120)
+  status                   String             @default("PENDING") @db.VarChar(20)
+  reviewedAt               DateTime?          @db.Timestamptz(3)
+  reviewNote               String?            @db.VarChar(500)
+  invitations              AccessInvitation[]
+  createdAt                DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime           @updatedAt @db.Timestamptz(3)
 
   @@index([createdAt])
 }
@@ -54,11 +58,91 @@ model Mission {
   lastHeartbeat         DateTime?              @db.Timestamptz(3)
   lastReconciliation    DateTime?              @db.Timestamptz(3)
   recoveryFailureReason String?                @db.VarChar(1000)
+  organizationId        String?                @db.Uuid
+  organization          Organization?          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   createdAt             DateTime               @default(now()) @db.Timestamptz(3)
   updatedAt             DateTime               @updatedAt @db.Timestamptz(3)
 
   @@index([status, updatedAt])
   @@index([createdAt, id])
+  @@index([organizationId, createdAt])
+}
+
+model Organization {
+  id                   String               @id @default(uuid()) @db.Uuid
+  name                 String               @db.VarChar(120)
+  slug                 String               @unique @db.VarChar(80)
+  mode                 String               @default("CUSTOMER") @db.VarChar(20)
+  spendingEnabled      Boolean              @default(false)
+  maximumMissionBudget Decimal              @default(1) @db.Decimal(20, 8)
+  maximumAcpJobUsdc    Decimal              @default(1) @db.Decimal(20, 8)
+  memberships          OrganizationMember[]
+  invitations          AccessInvitation[]
+  missions             Mission[]
+  sessions             AccessSession[]
+  createdAt            DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime             @updatedAt @db.Timestamptz(3)
+}
+
+model AccessUser {
+  id           String               @id @default(uuid()) @db.Uuid
+  email        String               @unique @db.VarChar(320)
+  name         String               @db.VarChar(120)
+  passwordHash String               @db.VarChar(500)
+  status       String               @default("ACTIVE") @db.VarChar(20)
+  memberships  OrganizationMember[]
+  sessions     AccessSession[]
+  createdAt    DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime             @updatedAt @db.Timestamptz(3)
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String       @db.Uuid
+  user           AccessUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @db.VarChar(30)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model AccessInvitation {
+  id             String       @id @default(uuid()) @db.Uuid
+  betaSignupId   String?      @db.Uuid
+  betaSignup     BetaSignup?  @relation(fields: [betaSignupId], references: [id], onDelete: SetNull)
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String       @db.VarChar(320)
+  role           String       @db.VarChar(30)
+  tokenHash      String       @unique @db.VarChar(64)
+  status         String       @default("PENDING") @db.VarChar(20)
+  expiresAt      DateTime     @db.Timestamptz(3)
+  acceptedAt     DateTime?    @db.Timestamptz(3)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([email, status])
+  @@index([betaSignupId])
+}
+
+model AccessSession {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @db.Uuid
+  user           AccessUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tokenHash      String       @unique @db.VarChar(64)
+  expiresAt      DateTime     @db.Timestamptz(3)
+  revokedAt      DateTime?    @db.Timestamptz(3)
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, expiresAt])
+  @@index([organizationId, expiresAt])
+  @@index([expiresAt])
 }
 
 enum OperatorApprovalKind {

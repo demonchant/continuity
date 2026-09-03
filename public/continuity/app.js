@@ -399,6 +399,74 @@ async function renderMissions() {
   document.querySelector('#mission-status').addEventListener('change', update);
 }
 
+async function renderAccessAdmin() {
+  const data = await protectedRequest('/api/v1/access-admin/requests');
+  const requests = data.requests || [];
+  app.innerHTML = `${pageHead('Access administration', 'Private-beta requests', 'Review applicants, issue single-use invitations, and keep judge workspaces unable to spend.')}
+    <div class="filters"><span class="caption">${requests.length} request${requests.length === 1 ? '' : 's'} · applicant details are operator-only</span><a class="button secondary" href="/dashboard/access">Refresh</a></div>
+    <div class="stack">${requests.length ? requests.map((request) => `<article class="panel panel-pad"><div class="section-heading"><div><p class="eyebrow">${escapeHtml(request.role)}</p><h2>${escapeHtml(request.email)}</h2></div>${status(request.status)}</div><p>${escapeHtml(request.workflow || 'No workflow description supplied.')}</p><p class="caption">Requested ${escapeHtml(fmtDate(request.createdAt))}</p>${request.status === 'PENDING' ? `<form class="mission-form" data-access-approve="${request.id}"><div class="form-grid"><label class="field"><span>Workspace name</span><input name="organizationName" value="${escapeHtml(request.email.split('@')[0])} workspace" required></label><label class="field"><span>Access type</span><select name="organizationMode"><option value="CUSTOMER">Customer</option><option value="JUDGE">Judge sandbox (no spending)</option></select></label><label class="field"><span>Role</span><select name="role"><option>OWNER</option><option>OPERATOR</option><option>FINANCE_APPROVER</option><option>VIEWER</option><option>JUDGE</option></select></label><label class="field"><span>Maximum mission budget (USDC)</span><input name="maximumMissionBudget" value="1.00" required></label><label class="field"><span>Maximum ACP job (USDC)</span><input name="maximumAcpJobUsdc" value="1.00" required></label><label class="toggle field-wide"><input name="spendingEnabled" type="checkbox"><span>Permit paid execution (customer workspaces only)</span></label></div><div class="form-actions"><button class="button" type="submit">Approve and send invitation</button><button class="button danger" type="button" data-access-reject="${request.id}">Reject</button><span class="caption" data-access-status></span></div></form>` : request.status === 'APPROVED' ? `<div class="form-actions"><button class="button secondary" type="button" data-access-reissue="${request.id}">Reissue invitation</button><span class="caption" data-access-status></span></div>` : request.reviewNote ? `<p class="caption">Review note: ${escapeHtml(request.reviewNote)}</p>` : ''}</article>`).join('') : empty('No beta requests', 'New consented requests will appear here.')}</div>`;
+  document.querySelectorAll('[data-access-approve]').forEach((form) =>
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const statusNote = form.querySelector('[data-access-status]');
+      const values = new FormData(form);
+      const mode = String(values.get('organizationMode'));
+      try {
+        const result = await protectedRequest(
+          `/api/v1/access-admin/requests/${form.dataset.accessApprove}/approve`,
+          {
+            method: 'POST',
+            body: {
+              organizationName: String(values.get('organizationName')),
+              organizationMode: mode,
+              role: mode === 'JUDGE' ? 'JUDGE' : String(values.get('role')),
+              spendingEnabled: mode === 'CUSTOMER' && values.get('spendingEnabled') === 'on',
+              maximumMissionBudget: String(values.get('maximumMissionBudget')),
+              maximumAcpJobUsdc: String(values.get('maximumAcpJobUsdc')),
+            },
+          },
+        );
+        statusNote.className = 'caption success';
+        statusNote.textContent =
+          result.delivery === 'SENT'
+            ? 'Invitation email sent.'
+            : `Email not sent (${result.delivery}). Copy the invitation securely: ${result.inviteUrl}`;
+      } catch (error) {
+        statusNote.className = 'caption error';
+        statusNote.textContent = error.message;
+      }
+    }),
+  );
+  document.querySelectorAll('[data-access-reject]').forEach((button) =>
+    button.addEventListener('click', async () => {
+      const note = window.prompt('Optional rejection note') || undefined;
+      await protectedRequest(
+        `/api/v1/access-admin/requests/${button.dataset.accessReject}/reject`,
+        { method: 'POST', body: { reviewNote: note } },
+      );
+      await renderAccessAdmin();
+    }),
+  );
+  document.querySelectorAll('[data-access-reissue]').forEach((button) =>
+    button.addEventListener('click', async () => {
+      const statusNote = button.parentElement.querySelector('[data-access-status]');
+      try {
+        const result = await protectedRequest(
+          `/api/v1/access-admin/requests/${button.dataset.accessReissue}/reissue`,
+          { method: 'POST' },
+        );
+        statusNote.textContent =
+          result.delivery === 'SENT'
+            ? 'New invitation email sent.'
+            : `Email not sent (${result.delivery}). Copy securely: ${result.inviteUrl}`;
+      } catch (error) {
+        statusNote.className = 'caption error';
+        statusNote.textContent = error.message;
+      }
+    }),
+  );
+}
+
 function pipelineFor(data) {
   const hasVerification = data.jobs.some((job) => job.verification);
   const stages = [
@@ -865,6 +933,9 @@ async function route(force = false) {
     } else if (path === '/dashboard/judge') {
       routeName = 'judge';
       await renderJudgeMode();
+    } else if (path === '/dashboard/access') {
+      routeName = 'access';
+      await renderAccessAdmin();
     } else await renderOverview();
     if (request !== state.request) return;
     activeNavigation(routeName);

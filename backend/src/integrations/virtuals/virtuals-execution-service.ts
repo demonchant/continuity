@@ -20,7 +20,7 @@ import type { VirtualsJobRepository } from './virtuals-job-repository.js';
 import type { VirtualsJob } from './virtuals-job.js';
 
 export interface ExecuteVirtualsMissionRequest {
-  readonly mission: Pick<Mission, 'id' | 'objective' | 'constraints' | 'budget'>;
+  readonly mission: Pick<Mission, 'id' | 'objective' | 'constraints' | 'budget' | 'organizationId'>;
   readonly actionId: string;
   readonly capabilities: readonly string[];
   readonly requirements: JsonObject;
@@ -344,6 +344,9 @@ export class VirtualsExecutionService {
       }
       await this.memory.recordFailure({
         missionId: request.mission.id,
+        ...(request.mission.organizationId
+          ? { organizationId: request.mission.organizationId }
+          : {}),
         mission: request.mission.objective,
         capability: request.capabilities.join(','),
         agentId: candidate.agent.id,

@@ -47,16 +47,20 @@ export class MemoryService {
       limit,
     });
 
+    const tenantRecords = query.organizationId
+      ? records.filter(({ record }) => record.organizationId === query.organizationId)
+      : records;
     this.logger.info(
       {
         event: 'memory.result',
         provider: this.provider.providerName,
-        count: records.length,
-        recordIds: records.map(({ sibylRecordId }) => sibylRecordId),
+        count: tenantRecords.length,
+        recordIds: tenantRecords.map(({ sibylRecordId }) => sibylRecordId),
+        organizationId: query.organizationId,
       },
       'Sibyl memory result',
     );
-    return { provider: 'sibyl', query: text, records };
+    return { provider: 'sibyl', query: text, records: tenantRecords };
   }
 
   async remember(input: NewMemoryRecord): Promise<MemoryRecord> {

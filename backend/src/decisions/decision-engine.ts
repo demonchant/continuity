@@ -73,21 +73,21 @@ export class DecisionEngine {
   }
 
   async decide(
-    mission: Pick<Mission, 'id' | 'objective'>,
+    mission: Pick<Mission, 'id' | 'objective' | 'organizationId'>,
     requiredCapabilities: readonly string[] = inferMissionCapabilities(mission.objective),
   ): Promise<AgentDecision> {
     return this.evaluate(mission, requiredCapabilities, true);
   }
 
   async preview(
-    mission: Pick<Mission, 'id' | 'objective'>,
+    mission: Pick<Mission, 'id' | 'objective' | 'organizationId'>,
     requiredCapabilities: readonly string[] = inferMissionCapabilities(mission.objective),
   ): Promise<AgentDecision> {
     return this.evaluate(mission, requiredCapabilities, false);
   }
 
   private async evaluate(
-    mission: Pick<Mission, 'id' | 'objective'>,
+    mission: Pick<Mission, 'id' | 'objective' | 'organizationId'>,
     requiredCapabilities: readonly string[],
     persistDecision: boolean,
   ): Promise<AgentDecision> {
@@ -104,6 +104,7 @@ export class DecisionEngine {
 
     const memoryContext = await loadDecisionMemoryContext(this.memory, {
       mission: mission.objective,
+      ...(mission.organizationId ? { organizationId: mission.organizationId } : {}),
       capabilities: normalizedCapabilities,
       agentIds: candidates.map(({ id }) => id),
       categories: ['outcome', 'failure', 'experience'],
@@ -186,6 +187,7 @@ export class DecisionEngine {
           : undefined;
       const decision = await this.memory.recordDecision({
         missionId: mission.id,
+        ...(mission.organizationId ? { organizationId: mission.organizationId } : {}),
         mission: mission.objective,
         capability: normalizedCapabilities.join(','),
         agentId: selected.agent.id,

@@ -32,6 +32,9 @@ import { MissionWorker } from './runner/mission-worker.js';
 import { PrismaMissionWorkerRepository } from './runner/prisma-mission-worker-repository.js';
 import { createLogger } from './shared/logging/logger.js';
 import { VerificationService } from './verification/verification-service.js';
+import { AccessService } from './access/access-service.js';
+import { PrismaAccessRepository } from './access/prisma-access-repository.js';
+import { ResendAccessNotificationService } from './access/access-notifications.js';
 
 async function closeServer(server: Server): Promise<void> {
   await new Promise<void>((resolve, reject) => {
@@ -70,6 +73,24 @@ async function main(): Promise<void> {
     logger.info({ event: 'dependencies.ready' }, 'PostgreSQL and Sibyl readiness established');
   }
   const missionService = new MissionService(new PrismaMissionRepository(prisma));
+  const accessConfig = config.access ?? {
+    publicUrl: 'http://localhost:3000',
+    inviteTtlHours: 72,
+    sessionTtlHours: 168,
+  };
+  const accessNotifications = new ResendAccessNotificationService(
+    {
+      ...(accessConfig.resendApiKey ? { apiKey: accessConfig.resendApiKey } : {}),
+      ...(accessConfig.emailFrom ? { from: accessConfig.emailFrom } : {}),
+      ...(accessConfig.adminEmail ? { adminEmail: accessConfig.adminEmail } : {}),
+    },
+    logger,
+  );
+  const accessService = new AccessService(new PrismaAccessRepository(prisma), accessNotifications, {
+    publicUrl: accessConfig.publicUrl,
+    inviteTtlHours: accessConfig.inviteTtlHours,
+    sessionTtlHours: accessConfig.sessionTtlHours,
+  });
   const approvals = new OperatorApprovalService(new PrismaOperatorApprovalRepository(prisma));
   const operatorToken = config.security?.operatorToken;
   if ((config.virtuals.enabled || config.base.enabled) && !operatorToken) {
@@ -248,6 +269,7 @@ async function main(): Promise<void> {
     readinessService,
     missionService,
     betaSignups: new PrismaBetaSignupRepository(prisma),
+    access: { service: accessService, notifications: accessNotifications },
     ...(virtuals ? { virtuals } : {}),
     ...(baseIntegration ? { base: baseIntegration } : {}),
     ...(economics ? { economics } : {}),

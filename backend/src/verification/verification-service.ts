@@ -354,6 +354,7 @@ export class VerificationService {
     ];
     const memoryInput = {
       missionId: request.mission.id,
+      ...(request.mission.organizationId ? { organizationId: request.mission.organizationId } : {}),
       mission: request.mission.objective,
       agentId: request.agent.id,
       agentProvider: request.agent.provider,

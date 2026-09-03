@@ -18,6 +18,14 @@ export interface ApplicationConfig {
   readonly database: {
     readonly url: string;
   };
+  readonly access?: {
+    readonly publicUrl: string;
+    readonly inviteTtlHours: number;
+    readonly sessionTtlHours: number;
+    readonly resendApiKey?: string;
+    readonly emailFrom?: string;
+    readonly adminEmail?: string;
+  };
   readonly security?: {
     readonly operatorToken?: string;
     readonly rateLimitWindowMs: number;
@@ -85,6 +93,14 @@ export function loadConfig(input: NodeJS.ProcessEnv = process.env): ApplicationC
       corsAllowedOrigins: environment.CORS_ALLOWED_ORIGINS,
     }),
     database: Object.freeze({ url: environment.DATABASE_URL }),
+    access: Object.freeze({
+      publicUrl: environment.PUBLIC_APP_URL,
+      inviteTtlHours: environment.ACCESS_INVITE_TTL_HOURS,
+      sessionTtlHours: environment.ACCESS_SESSION_TTL_HOURS,
+      ...(environment.RESEND_API_KEY ? { resendApiKey: environment.RESEND_API_KEY } : {}),
+      ...(environment.ACCESS_EMAIL_FROM ? { emailFrom: environment.ACCESS_EMAIL_FROM } : {}),
+      ...(environment.BETA_ADMIN_EMAIL ? { adminEmail: environment.BETA_ADMIN_EMAIL } : {}),
+    }),
     security: Object.freeze({
       ...(environment.CONTINUITY_OPERATOR_TOKEN
         ? { operatorToken: environment.CONTINUITY_OPERATOR_TOKEN }

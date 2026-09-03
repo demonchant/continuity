@@ -67,6 +67,8 @@ export interface MemoryRecord {
   readonly category: MemoryCategory;
   readonly timestamp: string;
   readonly missionId: string;
+  /** Tenant boundary for customer-owned missions. Absent only for legacy/operator missions. */
+  readonly organizationId?: string;
   readonly mission: string;
   readonly capability: string;
   readonly agentId?: string;
@@ -94,6 +96,8 @@ export type NewMemoryRecord = Omit<MemoryRecord, 'schemaVersion' | 'id' | 'times
 
 export interface MemoryQuery {
   readonly mission: string;
+  /** When present, recall must return records owned by this organization only. */
+  readonly organizationId?: string;
   readonly capabilities: readonly string[];
   readonly agentIds?: readonly string[];
   readonly tags?: readonly string[];

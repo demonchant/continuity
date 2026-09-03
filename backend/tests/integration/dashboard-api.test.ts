@@ -203,7 +203,8 @@ describe('Phase 13 dashboard and Phase 14 Judge Mode', () => {
     expect(client.text).toContain('operator-token');
     expect(client.text).toContain('New Mission');
     expect(client.text).toContain('Discover Agents');
-    expect(client.text).toContain('Approve ACP spend');
+    expect(client.text).toContain('Approve this one-time ACP payment');
+    expect(client.text).toContain('Automatic recurring charges: disabled');
     expect(client.text).toContain('Approve Base mainnet transaction');
     expect(client.text).toContain('sessionStorage');
     expect(client.text).not.toContain('VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN');

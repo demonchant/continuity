@@ -321,7 +321,8 @@ export class DashboardService {
         message: 'A public judge receipt is available only for terminal missions',
       });
     }
-    const { approvals: _operatorApprovals, ...publicReceipt } = await this.missionDetail(missionId);
+    const { approvals, ...publicReceipt } = await this.missionDetail(missionId);
+    void approvals;
     return publicReceipt;
   }
 

@@ -74,7 +74,7 @@ async function portal() {
   const p = data.principal;
   app.innerHTML = `<div class="toolbar"><div><p class="eyebrow">${escapeHtml(p.organizationMode)} workspace</p><h1>${escapeHtml(p.organizationName)}</h1><p class="muted">Signed in as ${escapeHtml(p.email)} · ${escapeHtml(p.role)}</p></div><button class="secondary" data-logout>Sign out</button></div>
   <div class="grid"><section class="panel"><h2>Workspace policy</h2><div class="receipt"><div><span>Paid execution</span><strong>${p.spendingEnabled ? 'Enabled' : 'Disabled'}</strong></div><div><span>Mission maximum</span><strong>${escapeHtml(p.maximumMissionBudget)} USDC</strong></div><div><span>ACP maximum</span><strong>${escapeHtml(p.maximumAcpJobUsdc)} USDC</strong></div><div><span>Payment approval</span><strong>One-time per job</strong></div></div></section>
-  <section class="panel"><h2>New mission</h2><form class="stack" data-mission><label>Objective<textarea name="objective" rows="3" maxlength="10000" required></textarea></label><label>Capabilities<input name="capabilities" placeholder="analysis" required></label><label>Budget (USDC)<input name="budget" value="0.50" required></label><button>Create mission</button><p data-status></p></form></section>
+  <section class="panel"><h2>New mission</h2><form class="stack" data-mission><label>Objective<textarea name="objective" rows="3" maxlength="10000" required>Create a fresh, sourced crypto news brief on AI agent payments on Base.</textarea></label><label>Capabilities<input name="capabilities" value="crypto news research" required></label><label>ACP offering input (JSON)<textarea name="acpRequirements" rows="4" required>{"topic":"AI agent payments on Base","timeframe":"24h","focus":"analysis"}</textarea></label><label>Budget (USDC)<input name="budget" value="0.10" required></label><button>Create mission</button><p data-status></p></form></section>
   ${p.role === 'OWNER' ? `<section class="panel"><h2>Invite your team</h2><p class="muted">Add operators, finance approvers, and read-only viewers.</p><form class="stack" data-member><label>Email<input name="email" type="email" required></label><label>Role<select name="role"><option value="OPERATOR">Operator</option><option value="FINANCE_APPROVER">Finance approver</option><option value="VIEWER">Viewer</option></select></label><button>Send invitation</button><p data-status></p></form></section>` : ''}</div>
   <section class="panel" style="margin-top:18px"><h2>Missions</h2><div class="missions">${data.missions.length ? data.missions.map((m) => `<article class="mission"><div><strong>${escapeHtml(m.objective)}</strong><span class="mono muted">${escapeHtml(m.id)}</span></div><div><span class="badge">${escapeHtml(m.status)}</span> <button class="secondary" data-open="${m.id}">Open</button></div></article>`).join('') : '<p class="muted">No missions in this workspace yet.</p>'}</div></section><section id="detail" style="margin-top:18px"></section>`;
   document.querySelector('[data-logout]').onclick = async () => {
@@ -87,6 +87,9 @@ async function portal() {
     const d = new FormData(form);
     const status = form.querySelector('[data-status]');
     try {
+      const acpRequirements = JSON.parse(String(d.get('acpRequirements')));
+      if (!acpRequirements || Array.isArray(acpRequirements) || typeof acpRequirements !== 'object')
+        throw new Error('ACP offering input must be a JSON object.');
       await api('/api/v1/portal/missions', {
         method: 'POST',
         body: {
@@ -97,6 +100,7 @@ async function portal() {
               .split(',')
               .map((v) => v.trim())
               .filter(Boolean),
+            acpRequirements,
             budgetCurrency: 'USDC',
             runner: {
               maximumRetries: 0,

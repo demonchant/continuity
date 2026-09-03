@@ -54,6 +54,7 @@ export function parseMissionPlan(
   caps: MissionPlanCaps,
 ): ParsedMissionPlan {
   const runner = object(mission.constraints.runner);
+  const acpRequirements = object(mission.constraints.acpRequirements);
   const baseAction = object(mission.constraints.baseAction);
   const requireBaseAction =
     mission.constraints.requireBaseAction === true || baseAction?.required === true;
@@ -77,7 +78,9 @@ export function parseMissionPlan(
   ];
   return {
     capabilities,
-    requirements: mission.constraints,
+    // Provider offerings define their own input schema. Keep orchestration
+    // controls out of the ACP payload when an explicit provider input exists.
+    requirements: acpRequirements ?? mission.constraints,
     budgetCurrency:
       typeof mission.constraints.budgetCurrency === 'string'
         ? mission.constraints.budgetCurrency.toUpperCase()

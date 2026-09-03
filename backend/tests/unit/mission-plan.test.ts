@@ -12,4 +12,24 @@ describe('production mission plan', () => {
     );
     expect(plan.limits.maximumRetries).toBe(0);
   });
+
+  it('sends only explicit offering input to ACP providers', () => {
+    const plan = parseMissionPlan(
+      {
+        objective: 'Create a sourced crypto news brief',
+        constraints: {
+          capabilities: ['crypto news research'],
+          acpRequirements: { topic: 'AI agents on Base', timeframe: '24h', focus: 'analysis' },
+          runner: { maximumRetries: 0 },
+        },
+      },
+      { maximumRetries: 2, timeoutMs: 900_000, failureThreshold: 3, candidateLimit: 10 },
+    );
+
+    expect(plan.requirements).toEqual({
+      topic: 'AI agents on Base',
+      timeframe: '24h',
+      focus: 'analysis',
+    });
+  });
 });

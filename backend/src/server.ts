@@ -1,5 +1,7 @@
 import type { Server } from 'node:http';
 import { createApp } from './api/app.js';
+import { OperatorApprovalService } from './approvals/operator-approval-service.js';
+import { PrismaOperatorApprovalRepository } from './approvals/prisma-operator-approval-repository.js';
 import { PrismaDatabaseHealthRepository } from './api/health/health-repository.js';
 import { HealthService } from './api/health/health-service.js';
 import { ReadinessService } from './api/health/readiness-service.js';
@@ -68,6 +70,11 @@ async function main(): Promise<void> {
     logger.info({ event: 'dependencies.ready' }, 'PostgreSQL and Sibyl readiness established');
   }
   const missionService = new MissionService(new PrismaMissionRepository(prisma));
+  const approvals = new OperatorApprovalService(new PrismaOperatorApprovalRepository(prisma));
+  const operatorToken = config.security?.operatorToken;
+  if ((config.virtuals.enabled || config.base.enabled) && !operatorToken) {
+    throw new Error('CONTINUITY_OPERATOR_TOKEN is required for the production operator product');
+  }
   const recovery = new RecoveryService(new PrismaRecoveryRepository(prisma), memoryService, logger);
   const virtualsJobs = new PrismaVirtualsJobRepository(prisma);
   const baseTransactions = new PrismaBaseTransactionRepository(prisma);
@@ -120,6 +127,7 @@ async function main(): Promise<void> {
       recovery,
       new VerificationService(memoryService, logger),
       logger,
+      approvals,
       {
         maxJobUsdc: config.virtuals.maxJobUsdc,
         pollIntervalMs: config.virtuals.pollIntervalMs,
@@ -129,7 +137,7 @@ async function main(): Promise<void> {
     virtuals = {
       execution: virtualsExecution,
       jobs: virtualsJobs,
-      operatorToken: config.virtuals.operatorToken,
+      operatorToken: operatorToken!,
     };
     logger.info(
       {
@@ -161,6 +169,7 @@ async function main(): Promise<void> {
       recovery,
       memoryService,
       logger,
+      approvals,
       {
         recipient: config.base.paymentRecipient,
         maxPaymentAmount: config.base.maxPaymentAmount,
@@ -172,7 +181,7 @@ async function main(): Promise<void> {
     baseIntegration = {
       payments: basePayments,
       transactions: baseTransactions,
-      operatorToken: config.base.operatorToken,
+      operatorToken: operatorToken!,
     };
     logger.info(
       {
@@ -192,7 +201,7 @@ async function main(): Promise<void> {
             basePayments,
             logger,
           ),
-          operatorToken: config.virtuals.operatorToken,
+          operatorToken: operatorToken!,
         }
       : undefined;
   const runner =
@@ -221,7 +230,15 @@ async function main(): Promise<void> {
             logger,
             { reconcile: (mission) => coordinator.reconcile(mission) },
           );
-          return { service: missionWorker, operatorToken: config.virtuals.operatorToken };
+          return {
+            service: missionWorker,
+            approvals,
+            virtuals: virtualsExecution,
+            jobs: virtualsJobs,
+            ...(basePayments ? { basePayments } : {}),
+            runnerCaps: config.runner,
+            operatorToken: operatorToken!,
+          };
         })()
       : undefined;
   const app = createApp({
@@ -235,7 +252,31 @@ async function main(): Promise<void> {
     ...(baseIntegration ? { base: baseIntegration } : {}),
     ...(economics ? { economics } : {}),
     ...(runner ? { runner } : {}),
-    dashboard: new DashboardService(missionService, memoryService, virtualsJobs, baseTransactions),
+    dashboard: new DashboardService(
+      missionService,
+      memoryService,
+      virtualsJobs,
+      baseTransactions,
+      approvals,
+      {
+        ...(config.virtuals.enabled
+          ? {
+              virtuals: {
+                chainId: config.virtuals.chainId,
+                maxJobUsdc: config.virtuals.maxJobUsdc,
+              },
+            }
+          : {}),
+        base: {
+          enabled: config.base.enabled,
+          network: config.base.network,
+          chainId: config.base.chainId!,
+          asset: config.base.paymentAsset,
+          ...(config.base.paymentRecipient ? { recipient: config.base.paymentRecipient } : {}),
+          maximumAmount: config.base.maxPaymentAmount,
+        },
+      },
+    ),
   });
   if (missionWorker) await missionWorker.start();
   const server = app.listen(config.runtime.port, () => {

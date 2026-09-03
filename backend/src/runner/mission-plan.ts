@@ -97,12 +97,7 @@ export function parseMissionPlan(
         }
       : {}),
     limits: {
-      maximumRetries: boundedInteger(
-        runner?.maximumRetries,
-        Math.min(1, caps.maximumRetries),
-        0,
-        caps.maximumRetries,
-      ),
+      maximumRetries: boundedInteger(runner?.maximumRetries, 0, 0, 0),
       timeoutMs: boundedInteger(
         runner?.timeoutMs,
         Math.min(15 * 60_000, caps.timeoutMs),

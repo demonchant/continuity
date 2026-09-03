@@ -1,11 +1,13 @@
 import type { Logger } from 'pino';
 import type { AgentDecision } from '../decisions/decision.js';
 import type { BasePaymentService } from '../integrations/base/base-payment-service.js';
+import { BaseIntegrationError } from '../integrations/base/base-errors.js';
 import type { BaseTransaction } from '../integrations/base/base-transaction.js';
 import type {
   VirtualsExecutionResult,
   VirtualsExecutionService,
 } from '../integrations/virtuals/virtuals-execution-service.js';
+import { VirtualsProtocolError } from '../integrations/virtuals/virtuals-errors.js';
 import type { MemoryService } from '../memory/memory-service.js';
 import type { Mission } from '../missions/mission.js';
 import type { MissionService } from '../missions/mission-service.js';
@@ -152,6 +154,22 @@ export class MissionRunner {
           timeoutMs: Math.max(1, plan.limits.timeoutMs - (this.now() - startedAt)),
         });
       } catch (error) {
+        if (
+          error instanceof VirtualsProtocolError &&
+          error.code === 'VIRTUALS_FUNDING_APPROVAL_REQUIRED'
+        ) {
+          mission = await this.missions.transition(
+            mission.id,
+            'AWAITING_FUNDING_APPROVAL',
+            'ACP budget proposal requires explicit operator approval',
+          );
+          await this.checkpoint(mission, plan, undefined, actionId, failures, 'approve-acp-spend');
+          throw new AppError({
+            statusCode: 409,
+            code: 'MISSION_AWAITING_FUNDING_APPROVAL',
+            message: 'Mission paused safely pending explicit ACP spend approval',
+          });
+        }
         failures += 1;
         attempts.push({
           number: attemptNumber,
@@ -250,6 +268,27 @@ export class MissionRunner {
           ? await this.executeBaseWithRetries(mission, plan, execution, startedAt)
           : undefined;
       } catch (error) {
+        if (error instanceof BaseIntegrationError && error.code === 'BASE_APPROVAL_REQUIRED') {
+          mission = await this.missions.transition(
+            mission.id,
+            'AWAITING_BASE_APPROVAL',
+            'Verified mission requires separate Base mainnet settlement approval',
+          );
+          await this.checkpoint(
+            mission,
+            plan,
+            execution.decision.selectedAgent.id,
+            `mission:${mission.id}:base-success-settlement`,
+            failures,
+            'approve-base-settlement',
+            execution.verification,
+          );
+          throw new AppError({
+            statusCode: 409,
+            code: 'MISSION_AWAITING_BASE_APPROVAL',
+            message: 'Mission paused safely pending explicit Base mainnet approval',
+          });
+        }
         return this.fail(mission, plan, attempts, errorMessage(error));
       }
       try {
@@ -486,6 +525,9 @@ export class MissionRunner {
     verification?: VerificationReport,
     base?: BaseTransaction,
   ) {
+    const awaitingApproval = ['AWAITING_FUNDING_APPROVAL', 'AWAITING_BASE_APPROVAL'].includes(
+      mission.status,
+    );
     return this.recovery.checkpoint({
       missionId: mission.id,
       mission: mission.objective,
@@ -493,7 +535,15 @@ export class MissionRunner {
       missionState: mission.status,
       currentStep: mission.currentStep,
       ...(selectedAgentId ? { selectedAgentId } : {}),
-      actionState: { actionId, status: mission.status === 'COMPLETED' ? 'COMPLETED' : 'FAILED' },
+      actionState: {
+        actionId,
+        status:
+          mission.status === 'COMPLETED'
+            ? 'COMPLETED'
+            : awaitingApproval
+              ? 'NOT_STARTED'
+              : 'FAILED',
+      },
       paymentState: base
         ? {
             paymentId: base.paymentId,

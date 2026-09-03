@@ -1,5 +1,6 @@
 import pino from 'pino';
 import { describe, expect, it, vi } from 'vitest';
+import type { OperatorApprovalService } from '../../src/approvals/operator-approval-service.js';
 import type {
   VirtualsAgentCandidate,
   VirtualsAgentSource,
@@ -66,12 +67,30 @@ function setup(
     now: () => number;
     sleep: (milliseconds: number) => Promise<void>;
   }> = {},
+  approvalGranted = true,
 ) {
   const provider = new MockMemoryProvider();
   const memory = new MemoryService(provider, logger);
   const jobs = new InMemoryVirtualsJobRepository();
   const recovery = new RecoveryService(new InMemoryRecoveryRepository(), memory, logger);
   const verification = new VerificationService(memory, logger);
+  const approvals = {
+    authorized: vi.fn().mockImplementation((input) =>
+      Promise.resolve(
+        approvalGranted
+          ? {
+              ...input,
+              id: 'approval-1',
+              status: 'APPROVED',
+              approvedAt: new Date(),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+          : null,
+      ),
+    ),
+    consume: vi.fn().mockResolvedValue(undefined),
+  } as unknown as OperatorApprovalService;
   const service = new VirtualsExecutionService(
     source,
     jobs,
@@ -79,6 +98,7 @@ function setup(
     recovery,
     verification,
     logger,
+    approvals,
     {
       maxJobUsdc: 0.5,
       pollIntervalMs: 1,
@@ -87,7 +107,7 @@ function setup(
       ...options,
     },
   );
-  return { service, provider, jobs };
+  return { service, provider, jobs, approvals };
 }
 
 describe('VirtualsExecutionService', () => {
@@ -115,6 +135,31 @@ describe('VirtualsExecutionService', () => {
     expect(provider.records).toEqual([]);
     expect(provider.events).toEqual([]);
     expect(provider.checkpoints).toEqual([]);
+  });
+
+  it('pauses at the durable proposal and never funds without exact operator approval', async () => {
+    const source = new MockVirtualsSource([
+      {
+        jobId: 'job-99',
+        chainId: 8453,
+        providerAddress: '0xabc',
+        state: 'BUDGET_PROPOSED',
+        budget: { amount: '0.25', currency: 'USDC' },
+      },
+    ]);
+    const { service, jobs } = setup(source, {}, false);
+    await expect(
+      service.execute({
+        mission,
+        actionId: 'approval-required',
+        capabilities: ['research'],
+        requirements: {},
+      }),
+    ).rejects.toMatchObject({ code: 'VIRTUALS_FUNDING_APPROVAL_REQUIRED' });
+    expect(source.fundJob).not.toHaveBeenCalled();
+    await expect(
+      jobs.findByMissionAndAction(mission.id, 'approval-required'),
+    ).resolves.toMatchObject({ state: 'AWAITING_FUNDING_APPROVAL' });
   });
 
   it('funds, verifies, completes, and persists a successful real job flow', async () => {

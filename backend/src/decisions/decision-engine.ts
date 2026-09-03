@@ -76,6 +76,21 @@ export class DecisionEngine {
     mission: Pick<Mission, 'id' | 'objective'>,
     requiredCapabilities: readonly string[] = inferMissionCapabilities(mission.objective),
   ): Promise<AgentDecision> {
+    return this.evaluate(mission, requiredCapabilities, true);
+  }
+
+  async preview(
+    mission: Pick<Mission, 'id' | 'objective'>,
+    requiredCapabilities: readonly string[] = inferMissionCapabilities(mission.objective),
+  ): Promise<AgentDecision> {
+    return this.evaluate(mission, requiredCapabilities, false);
+  }
+
+  private async evaluate(
+    mission: Pick<Mission, 'id' | 'objective'>,
+    requiredCapabilities: readonly string[],
+    persistDecision: boolean,
+  ): Promise<AgentDecision> {
     const normalizedCapabilities = requiredCapabilities.map(normalizeCapability);
     const { candidates } = this.candidateService.identify(mission, normalizedCapabilities);
     if (candidates.length === 0) {
@@ -164,7 +179,7 @@ export class DecisionEngine {
     const memoryReferences = [...new Set(evidence.flatMap((item) => item.memoryReferences))];
 
     let decisionMemoryId: string | undefined;
-    if (memoryContext.historicalExperience === 'available') {
+    if (persistDecision && memoryContext.historicalExperience === 'available') {
       const cost =
         selected.agent.cost.amount !== undefined && selected.agent.cost.currency !== undefined
           ? { amount: selected.agent.cost.amount, currency: selected.agent.cost.currency }
@@ -187,11 +202,18 @@ export class DecisionEngine {
             offering && typeof offering === 'object' && !Array.isArray(offering)
               ? offering.name
               : undefined;
+          const offeringId = agent.metadata.offeringId;
+          const slaMinutes =
+            offering && typeof offering === 'object' && !Array.isArray(offering)
+              ? offering.slaMinutes
+              : undefined;
           const compatibilityReasons = agent.metadata.compatibilityReasons;
           return {
             agentId: agent.id,
             name: agent.name,
             ...(typeof offeringName === 'string' ? { offeringName } : {}),
+            ...(typeof offeringId === 'string' ? { offeringId } : {}),
+            ...(typeof slaMinutes === 'number' ? { slaMinutes } : {}),
             capabilities: agent.capabilities,
             ...(agent.cost.amount && agent.cost.currency
               ? { price: { amount: agent.cost.amount, currency: agent.cost.currency } }

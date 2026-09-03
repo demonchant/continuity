@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import pino from 'pino';
 import { describe, expect, it, vi } from 'vitest';
+import type { OperatorApprovalService } from '../../src/approvals/operator-approval-service.js';
 import type { BaseTransactionGateway } from '../../src/integrations/base/base-gateway.js';
 import { BasePaymentService } from '../../src/integrations/base/base-payment-service.js';
 import { MemoryService } from '../../src/memory/memory-service.js';
@@ -20,7 +21,27 @@ const mission: Pick<Mission, 'id' | 'objective' | 'budget' | 'status'> = {
   status: 'VERIFYING',
 };
 
-function setup(overrides: Partial<BaseTransactionGateway> = {}) {
+function approvalService(granted = true) {
+  return {
+    authorized: vi.fn().mockImplementation((input) =>
+      Promise.resolve(
+        granted
+          ? {
+              ...input,
+              id: 'approval',
+              status: 'APPROVED',
+              approvedAt: new Date(),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+          : null,
+      ),
+    ),
+    consume: vi.fn().mockResolvedValue(undefined),
+  } as unknown as OperatorApprovalService;
+}
+
+function setup(overrides: Partial<BaseTransactionGateway> = {}, approvalGranted = true) {
   const gateway: BaseTransactionGateway = {
     network: 'base-sepolia',
     chainId: 84532,
@@ -57,7 +78,8 @@ function setup(overrides: Partial<BaseTransactionGateway> = {}) {
   const memory = new MemoryService(provider, logger);
   const repository = new InMemoryBaseTransactionRepository();
   const recovery = new RecoveryService(new InMemoryRecoveryRepository(), memory, logger);
-  const service = new BasePaymentService(gateway, repository, recovery, memory, logger, {
+  const approvals = approvalService(approvalGranted);
+  const service = new BasePaymentService(gateway, repository, recovery, memory, logger, approvals, {
     recipient,
     maxPaymentAmount: '0.0005',
     confirmations: 1,
@@ -75,6 +97,15 @@ const request = {
 } as const;
 
 describe('BasePaymentService', () => {
+  it('never constructs or broadcasts a transaction without exact operator approval', async () => {
+    const { service, gateway, repository } = setup({}, false);
+    await expect(service.pay(request)).rejects.toMatchObject({ code: 'BASE_APPROVAL_REQUIRED' });
+    expect(gateway.sendNativeTransfer).not.toHaveBeenCalled();
+    await expect(
+      repository.findByMissionAndAction(mission.id, request.actionId),
+    ).resolves.toBeNull();
+  });
+
   it('validates budget before constructing a transaction', async () => {
     const { service, gateway } = setup();
     await expect(service.pay({ ...request, amount: '0.0006' })).rejects.toMatchObject({
@@ -133,6 +164,7 @@ describe('BasePaymentService', () => {
       new RecoveryService(new InMemoryRecoveryRepository(), memory, logger),
       memory,
       logger,
+      approvalService(),
       {
         recipient,
         maxPaymentAmount: '1.00',

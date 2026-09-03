@@ -2,6 +2,7 @@ const app = document.querySelector('#app');
 const refreshButton = document.querySelector('#refresh-button');
 const menuButton = document.querySelector('.menu-button');
 const lastUpdated = document.querySelector('#last-updated');
+const lockButton = document.querySelector('#lock-button');
 const operatorTokenStorageKey = 'continuity.dashboard.operator-token';
 
 const state = {
@@ -9,6 +10,8 @@ const state = {
   details: new Map(),
   judgeOverview: null,
   judgeDetails: new Map(),
+  discovery: new Map(),
+  pollTimer: null,
   request: 0,
 };
 
@@ -60,13 +63,16 @@ function operatorToken() {
   return sessionStorage.getItem(operatorTokenStorageKey)?.trim() || '';
 }
 
-async function fetchJson(path, requiresOperatorToken = false) {
+async function fetchJson(path, requiresOperatorToken = false, options = {}) {
   const token = requiresOperatorToken ? operatorToken() : '';
   const response = await fetch(path, {
+    method: options.method || 'GET',
     headers: {
       accept: 'application/json',
+      ...(options.body ? { 'content-type': 'application/json' } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
+    ...(options.body ? { body: JSON.stringify(options.body) } : {}),
   });
   const body = await response.json().catch(() => null);
   if (requiresOperatorToken && response.status === 401) {
@@ -78,6 +84,14 @@ async function fetchJson(path, requiresOperatorToken = false) {
     );
   }
   return body.data;
+}
+
+function protectedRequest(path, options = {}) {
+  return fetchJson(path, true, options);
+}
+
+function updateLockControl() {
+  lockButton.hidden = !operatorToken();
 }
 
 async function overview(force = false) {
@@ -122,7 +136,7 @@ function empty(title, description, action = '') {
 
 function renderError(error) {
   if (error instanceof Error && error.message === 'DASHBOARD_AUTH_REQUIRED') {
-    app.innerHTML = `<div class="error-state"><div><span class="empty-icon" aria-hidden="true">!</span><h2>Operator access required</h2><p>Enter the dashboard operator token to load protected telemetry. It is kept only for this browser session.</p><form data-operator-token-form><label class="sr-only" for="operator-token">Operator token</label><input class="operator-token-input" id="operator-token" type="password" autocomplete="off" required><button class="button" type="submit">Unlock dashboard</button></form></div></div>`;
+    app.innerHTML = `<div class="error-state"><div><span class="empty-icon" aria-hidden="true">!</span><h2>Operator access required</h2><p>Enter the Continuity operator token to unlock mission creation, discovery, execution, approvals, recovery, and protected telemetry. It is kept only for this browser session.</p><form data-operator-token-form><label class="sr-only" for="operator-token">Operator token</label><input class="operator-token-input" id="operator-token" type="password" autocomplete="off" required><button class="button" type="submit">Unlock dashboard</button></form></div></div>`;
     document.querySelector('[data-operator-token-form]')?.addEventListener('submit', (event) => {
       event.preventDefault();
       const input = document.querySelector('#operator-token');
@@ -135,7 +149,7 @@ function renderError(error) {
     });
     return;
   }
-  app.innerHTML = `<div class="error-state"><div><span class="empty-icon" aria-hidden="true">!</span><h2>Telemetry unavailable</h2><p>${escapeHtml(error instanceof Error ? error.message : 'The dashboard could not load operational data.')}</p><button class="button" type="button" data-retry>Try again</button></div></div>`;
+  app.innerHTML = `<div class="error-state"><div><span class="empty-icon" aria-hidden="true">!</span><h2>Operations unavailable</h2><p>${escapeHtml(error instanceof Error ? error.message : 'The dashboard could not load operational data.')}</p><button class="button" type="button" data-retry>Try again</button></div></div>`;
   document.querySelector('[data-retry]')?.addEventListener('click', () => route(true));
 }
 
@@ -147,7 +161,8 @@ function missionRows(missions) {
   if (!missions.length)
     return empty(
       'No missions yet',
-      'Create a mission through the API to begin an autonomous operation.',
+      'Create a mission to begin a real persisted operation.',
+      '<a class="button" href="/dashboard/missions/new">New Mission</a>',
     );
   return `<div class="panel mission-list"><div class="mission-row header"><span>Mission</span><span>Status</span><span>Budget</span><span>Updated</span><span></span></div>${missions
     .map(
@@ -275,7 +290,7 @@ async function renderOverview() {
   const data = await overview();
   const latest = data.missions[0];
   const latestDetail = latest ? await detail(latest.id) : null;
-  app.innerHTML = `${pageHead('System overview', 'Memory turns outcomes into better operations.', 'Continuity recalls what worked, explains who it trusts, verifies every result, and records what happens next.')}
+  app.innerHTML = `${pageHead('System overview', 'Memory turns outcomes into better operations.', 'Continuity recalls what worked, explains who it trusts, verifies every result, and records what happens next.', '<a class="button" href="/dashboard/missions/new">New Mission</a>')}
     <section class="metrics" aria-label="Mission metrics">
       <article class="metric"><span class="metric-label">Total missions</span><strong class="metric-value">${data.metrics.total}</strong><span class="metric-note">durable operations</span></article>
       <article class="metric"><span class="metric-label">Currently active</span><strong class="metric-value">${data.metrics.active}</strong><span class="metric-note">bounded autonomous runs</span></article>
@@ -287,9 +302,88 @@ async function renderOverview() {
     <section class="section"><div class="section-heading"><h2>Autonomous control loop</h2></div><div class="panel pipeline">${['Mission', 'Recall', 'Evaluate', 'Select', 'Execute', 'Verify', 'Base', 'Remember'].map((step, index) => `<div class="pipeline-step complete"><span class="step-node">${index + 1}</span><span class="step-label">${step}</span></div>`).join('')}</div></section>`;
 }
 
+function missionForm() {
+  return `<form class="panel panel-pad mission-form" data-new-mission>
+    <div class="form-grid">
+      <label class="field field-wide"><span>Objective</span><textarea name="objective" rows="4" maxlength="2000" required placeholder="Describe the real outcome the provider must deliver"></textarea></label>
+      <label class="field"><span>Budget (USDC)</span><input name="budget" inputmode="decimal" pattern="\\d+(?:\\.\\d{1,8})?" required placeholder="0.50"></label>
+      <label class="field"><span>Capabilities</span><input name="capabilities" required placeholder="research, analysis"><small>Comma-separated capabilities used for Virtuals discovery.</small></label>
+    </div>
+    <details class="advanced"><summary>Advanced controls</summary>
+      <div class="form-grid">
+        <label class="field"><span>Candidate limit</span><input name="candidateLimit" type="number" min="1" max="20" value="5"></label>
+        <label class="field"><span>Timeout (seconds)</span><input name="timeoutSeconds" type="number" min="30" max="3600" value="900"></label>
+        <label class="field"><span>Failure threshold</span><input name="failureThreshold" type="number" min="1" max="10" value="1"></label>
+        <label class="field"><span>Retry behavior</span><input value="No funded retries" disabled><small>Production runs permit exactly one funded attempt.</small></label>
+        <label class="toggle field-wide"><input name="baseEnabled" type="checkbox"><span>Enable separate Base settlement after verified ACP success</span></label>
+        <label class="field" data-base-amount hidden><span>Base settlement amount</span><input name="baseAmount" inputmode="decimal" placeholder="0.0001"><small>Must not exceed the configured 0.001 ETH maximum.</small></label>
+      </div>
+    </details>
+    <div class="form-actions"><p class="caption" data-form-status>Nothing is spent when a mission is created.</p><button class="button" type="submit">Create mission</button></div>
+  </form>`;
+}
+
+async function renderNewMission() {
+  app.innerHTML = `${pageHead('Mission control', 'New Mission', 'Create durable mission state first. Discovery is a separate read-only step and all financial actions require later approval.')}${missionForm()}`;
+  const form = document.querySelector('[data-new-mission]');
+  const baseToggle = form.querySelector('[name="baseEnabled"]');
+  const baseAmount = form.querySelector('[data-base-amount]');
+  baseToggle.addEventListener('change', () => {
+    baseAmount.hidden = !baseToggle.checked;
+    baseAmount.querySelector('input').required = baseToggle.checked;
+  });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    const note = form.querySelector('[data-form-status]');
+    const values = new FormData(form);
+    const capabilities = String(values.get('capabilities') || '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const constraints = {
+      capabilities,
+      budgetCurrency: 'USDC',
+      runner: {
+        maximumRetries: 0,
+        candidateLimit: Number(values.get('candidateLimit')),
+        timeoutMs: Number(values.get('timeoutSeconds')) * 1000,
+        failureThreshold: Number(values.get('failureThreshold')),
+      },
+    };
+    if (baseToggle.checked) {
+      constraints.requireBaseAction = true;
+      constraints.baseAction = {
+        required: true,
+        purpose: 'MISSION_SUCCESS_SETTLEMENT',
+        amount: String(values.get('baseAmount')),
+        asset: 'ETH',
+      };
+    }
+    submit.disabled = true;
+    note.textContent = 'Creating persisted mission...';
+    try {
+      const mission = await protectedRequest('/api/v1/missions', {
+        method: 'POST',
+        body: {
+          objective: String(values.get('objective')),
+          budget: String(values.get('budget')),
+          constraints,
+        },
+      });
+      state.overview = null;
+      history.pushState({}, '', `/dashboard/missions/${encodeURIComponent(mission.id)}`);
+      await route(true);
+    } catch (error) {
+      note.textContent = error instanceof Error ? error.message : 'Mission could not be created.';
+      submit.disabled = false;
+    }
+  });
+}
+
 async function renderMissions() {
   const data = await overview();
-  app.innerHTML = `${pageHead('Mission control', 'Missions', 'Inspect every autonomous operation from intake through verified outcome and memory update.')}
+  app.innerHTML = `${pageHead('Mission control', 'Missions', 'Inspect every autonomous operation from intake through verified outcome and memory update.', '<a class="button" href="/dashboard/missions/new">New Mission</a>')}
     <div class="filters"><label><span class="caption">Search missions</span><input id="mission-search" class="search" type="search" placeholder="Objective or mission ID" autocomplete="off" /></label><label><span class="caption">Filter status</span><select id="mission-status" class="search"><option value="">All statuses</option>${[...new Set(data.missions.map(({ status }) => status))].map((value) => `<option>${escapeHtml(value)}</option>`).join('')}</select></label></div><div id="mission-results">${missionRows(data.missions)}</div>`;
   const update = () => {
     const query = document.querySelector('#mission-search').value.trim().toLowerCase();
@@ -340,11 +434,17 @@ function verificationPanel(data) {
 
 function basePanel(data) {
   const transaction = data.transactions.at(-1);
-  if (!transaction)
-    return empty(
-      'No Base action',
-      'This mission has no recorded onchain action. It may not require one or execution has not reached payment.',
-    );
+  const configured = data.product?.base;
+  const action = data.mission.constraints?.baseAction;
+  if (!transaction) {
+    if (!action)
+      return empty(
+        'Base settlement off',
+        'This mission does not request a separate Base settlement.',
+      );
+    const awaiting = data.mission.status === 'AWAITING_BASE_APPROVAL';
+    return `<div class="panel panel-pad"><div class="section-heading"><h2>Base settlement</h2>${status(awaiting ? 'AWAITING_APPROVAL' : 'PENDING_VERIFICATION')}</div><p class="caption">Separate from ACP provider funding. No transaction is sent without explicit approval.</p><div class="receipt"><div class="receipt-item"><span>Network</span><strong>${escapeHtml(configured?.network || 'Base Mainnet')}</strong></div><div class="receipt-item"><span>Chain ID</span><strong>${escapeHtml(configured?.chainId || '8453')}</strong></div><div class="receipt-item"><span>Asset</span><strong>${escapeHtml(configured?.asset || action.asset || 'ETH')}</strong></div><div class="receipt-item"><span>Recipient</span><strong title="${escapeHtml(configured?.recipient || '')}">${escapeHtml(shortId(configured?.recipient))}</strong></div><div class="receipt-item"><span>Exact amount</span><strong>${escapeHtml(action.amount || '—')} ${escapeHtml(action.asset || configured?.asset || 'ETH')}</strong></div><div class="receipt-item"><span>Configured maximum</span><strong>${escapeHtml(configured?.maximumAmount || '—')} ${escapeHtml(configured?.asset || 'ETH')}</strong></div></div>${awaiting ? '<button class="button danger" type="button" data-approve-base>Approve Base mainnet transaction</button>' : ''}</div>`;
+  }
   const explorer =
     transaction.explorerUrl && /^https:\/\//.test(transaction.explorerUrl)
       ? transaction.explorerUrl
@@ -355,7 +455,59 @@ function basePanel(data) {
 function virtualsPanel(data) {
   const job = data.jobs.at(-1);
   if (!job) return empty('No Virtuals receipt', 'No external ACP job is linked to this mission.');
-  return `<div class="panel panel-pad"><div class="section-heading"><h2>Virtuals ACP</h2>${status(job.state)}</div><div class="receipt"><div class="receipt-item"><span>Provider</span><strong title="${escapeHtml(job.providerAddress)}">${escapeHtml(shortId(job.providerAddress))}</strong></div><div class="receipt-item"><span>Offering</span><strong>${escapeHtml(job.offeringName)}</strong></div><div class="receipt-item"><span>External job ID</span><strong title="${escapeHtml(job.externalJobId)}">${escapeHtml(shortId(job.externalJobId))}</strong></div><div class="receipt-item"><span>Chain</span><strong>${job.chainId}</strong></div></div>${job.result ? `<p class="caption" style="margin-top:1rem">Deliverable persisted with this receipt.</p>` : ''}</div>`;
+  const proposed = job.lifecycle?.proposedBudget;
+  const awaiting = job.state === 'AWAITING_FUNDING_APPROVAL';
+  const selected = data.decision?.candidates?.find((candidate) => candidate.selected);
+  return `<div class="panel panel-pad"><div class="section-heading"><h2>Virtuals ACP</h2>${status(job.state)}</div><div class="receipt"><div class="receipt-item"><span>Provider name</span><strong>${escapeHtml(selected?.name || 'Not supplied')}</strong></div><div class="receipt-item"><span>Provider agent ID</span><strong title="${escapeHtml(job.agentId)}">${escapeHtml(job.agentId)}</strong></div><div class="receipt-item"><span>Provider wallet</span><strong title="${escapeHtml(job.providerAddress)}">${escapeHtml(shortId(job.providerAddress))}</strong></div><div class="receipt-item"><span>Offering</span><strong>${escapeHtml(job.offeringName)}</strong></div><div class="receipt-item"><span>Offering ID</span><strong>${escapeHtml(selected?.offeringId || selected?.offeringName || 'Not supplied')}</strong></div><div class="receipt-item"><span>Advertised price</span><strong>${escapeHtml(selected?.price?.amount || 'Not supplied')} ${escapeHtml(selected?.price?.currency || '')}</strong></div><div class="receipt-item"><span>ACP job ID</span><strong title="${escapeHtml(job.externalJobId)}">${escapeHtml(job.externalJobId)}</strong></div><div class="receipt-item"><span>Chain</span><strong>${job.chainId}</strong></div><div class="receipt-item"><span>Budget proposal</span><strong>${escapeHtml(proposed?.amount || '—')} ${escapeHtml(proposed?.currency || '')}</strong></div><div class="receipt-item"><span>Created</span><strong>${escapeHtml(fmtDate(job.createdAt))}</strong></div><div class="receipt-item"><span>Last observed</span><strong>${escapeHtml(fmtDate(job.updatedAt))}</strong></div><div class="receipt-item wide"><span>Observed lifecycle</span><strong>${escapeHtml((job.lifecycle?.observedStates || [job.state]).join(' → '))}</strong></div></div>${awaiting ? `<div class="approval-callout"><strong>Provider requests ${escapeHtml(proposed?.amount || '—')} ${escapeHtml(proposed?.currency || 'USDC')}</strong><p>Mission budget: ${escapeHtml(data.mission.budget)} USDC · Global maximum: ${escapeHtml(data.product?.virtuals?.maxJobUsdc ?? '—')} USDC · Wallet balance: not available from the ACP SDK · Maximum funded attempts: 1 · Additional provider funds required: YES</p><button class="button danger" type="button" data-approve-acp>Approve ACP spend</button></div>` : ''}</div>`;
+}
+
+function discoveryPanel(data) {
+  const preview = state.discovery.get(data.mission.id);
+  if (!preview)
+    return `<div class="panel panel-pad"><div class="section-heading"><h2>Discover agents</h2>${status('READ_ONLY')}</div><p>Query the real Virtuals marketplace and Sibyl history before creating an ACP job. Discovery cannot fund a job or send a Base transaction.</p><button class="button" type="button" data-discover>${data.mission.status === 'COMPLETED' ? 'Preview routing again' : 'Discover Agents'}</button></div>`;
+  const evidence = new Map((preview.decision?.evidence || []).map((item) => [item.agentId, item]));
+  return `<div class="panel panel-pad"><div class="section-heading"><h2>Real Virtuals candidates</h2>${status('NO_SPEND')}</div><p class="decision-quote">${escapeHtml(preview.decision?.reason || 'Sibyl routing preview returned no explanation.')}</p><div class="candidate-grid">${preview.candidates
+    .map((candidate) => {
+      const score = evidence.get(candidate.agent.id);
+      const selected = preview.decision?.selectedAgent?.id === candidate.agent.id;
+      return `<article class="candidate ${selected ? 'selected' : ''}"><div class="section-heading"><h3>${escapeHtml(candidate.agent.name)}</h3>${selected ? status('SELECTED') : ''}</div><p class="mono caption">${escapeHtml(candidate.agent.id)}</p><div class="receipt"><div class="receipt-item"><span>Offering</span><strong>${escapeHtml(candidate.offeringName)}</strong></div><div class="receipt-item"><span>Offering ID</span><strong>${escapeHtml(candidate.offeringId || 'Not supplied')}</strong></div><div class="receipt-item"><span>Current price</span><strong>${escapeHtml(candidate.agent.cost?.amount || 'Not supplied')} ${escapeHtml(candidate.agent.cost?.currency || '')}</strong></div><div class="receipt-item"><span>SLA</span><strong>${escapeHtml(candidate.agent.metadata?.offering?.slaMinutes ?? 'Not supplied')}${candidate.agent.metadata?.offering?.slaMinutes !== undefined ? ' min' : ''}</strong></div><div class="receipt-item"><span>Compatibility</span><strong>${escapeHtml(candidate.compatibility?.compatible === false ? 'Not compatible' : 'Compatible')}</strong></div><div class="receipt-item"><span>Sibyl score</span><strong>${score?.finalScore ?? '—'}</strong></div><div class="receipt-item"><span>Historical observations</span><strong>${score?.metrics?.observationCount ?? 0}</strong></div></div></article>`;
+    })
+    .join(
+      '',
+    )}</div><div class="form-actions"><p class="caption">Preview only. No ACP job, funding, or Base transaction was created.</p><button class="button secondary" type="button" data-discover>Refresh preview</button></div></div>`;
+}
+
+function persistedRoutingPanel(decision) {
+  if (!decision?.candidates?.length)
+    return empty(
+      'Persisted routing evidence pending',
+      'Candidate scores and citations will be stored when execution makes its decision.',
+    );
+  return `<div class="panel panel-pad"><div class="section-heading"><h2>Persisted routing evidence</h2><span class="caption">Exact scores and Sibyl citations used</span></div><div class="candidate-grid">${decision.candidates.map((candidate) => `<article class="candidate ${candidate.selected ? 'selected' : ''}"><div class="section-heading"><h3>${escapeHtml(candidate.name || candidate.agentId)}</h3>${candidate.selected ? status('SELECTED') : ''}</div><div class="receipt"><div class="receipt-item"><span>Final score</span><strong>${candidate.finalScore ?? '—'}</strong></div><div class="receipt-item"><span>Historical score</span><strong>${candidate.historicalScore ?? '—'}</strong></div><div class="receipt-item"><span>Success rate</span><strong>${percent(candidate.successRate)}</strong></div><div class="receipt-item"><span>Compatibility</span><strong>${candidate.compatibilityScore ?? 'Not supplied'}</strong></div><div class="receipt-item"><span>Price</span><strong>${escapeHtml(candidate.price?.amount || 'Not supplied')} ${escapeHtml(candidate.price?.currency || '')}</strong></div><div class="receipt-item"><span>Offering</span><strong>${escapeHtml(candidate.offeringName || 'Not supplied')}</strong></div></div><p class="caption">Citations: ${(candidate.memoryReferences || []).length ? candidate.memoryReferences.map((ref) => `<span class="mono wrap">${escapeHtml(ref)}</span>`).join('<br>') : 'None'}</p></article>`).join('')}</div></div>`;
+}
+
+function resultAndEvidence(data) {
+  const job = [...data.jobs].reverse().find((item) => item.result || item.evidenceHash);
+  if (!job)
+    return empty(
+      'Result and evidence pending',
+      'The real provider deliverable and SHA-256 evidence receipt will appear after submission and verification.',
+    );
+  const deliverable = job.result?.output ?? job.result?.value ?? job.result;
+  const text = typeof deliverable === 'string' ? deliverable : JSON.stringify(deliverable, null, 2);
+  return `<div class="stack"><div class="panel panel-pad"><div class="section-heading"><h2>Provider deliverable</h2>${status('PERSISTED')}</div><pre class="deliverable">${escapeHtml(text || 'No deliverable content persisted.')}</pre></div><div class="panel panel-pad"><div class="section-heading"><h2>SHA-256 evidence</h2>${status(job.evidenceHash ? 'PERSISTED' : 'PENDING')}</div><div class="receipt"><div class="receipt-item wide"><span>Evidence hash</span><strong class="mono wrap">${escapeHtml(job.evidenceHash || 'Pending')}</strong></div><div class="receipt-item"><span>ACP provider</span><strong>${escapeHtml(job.provenance?.providerId || job.agentId)}</strong></div><div class="receipt-item"><span>Offering</span><strong>${escapeHtml(job.provenance?.offeringId || job.offeringName)}</strong></div><div class="receipt-item"><span>Captured</span><strong>${escapeHtml(fmtDate(job.provenance?.evidenceCapturedAt || job.updatedAt))}</strong></div></div></div></div>`;
+}
+
+function recoveryPanel(data) {
+  const mission = data.mission;
+  const ambiguous =
+    mission.recoveryState === 'BLOCKED' ||
+    data.jobs.some((job) => job.state === 'UNCERTAIN') ||
+    data.transactions.some((tx) => tx.status === 'UNCERTAIN');
+  const resumable =
+    ['CREATED', 'AWAITING_FUNDING_APPROVAL', 'AWAITING_BASE_APPROVAL'].includes(mission.status) &&
+    !ambiguous;
+  return `<div class="panel panel-pad"><div class="section-heading"><h2>Recovery</h2>${status(ambiguous ? 'BLOCKED' : resumable ? 'SAFE' : mission.recoveryState || 'OBSERVING')}</div><div class="receipt"><div class="receipt-item"><span>Recovery state</span><strong>${escapeHtml(mission.recoveryState || 'No intervention')}</strong></div><div class="receipt-item"><span>Last reconciliation</span><strong>${escapeHtml(fmtDate(mission.lastReconciliation))}</strong></div><div class="receipt-item"><span>Safe to resume</span><strong>${resumable ? 'YES' : 'NO'}</strong></div><div class="receipt-item"><span>Ambiguous side effect</span><strong>${ambiguous ? 'BLOCKS RETRY' : 'NONE'}</strong></div></div>${mission.recoveryFailureReason ? `<p class="caption">${escapeHtml(mission.recoveryFailureReason)}</p>` : ''}${mission.status === 'RECOVERING' ? '<button class="button secondary" type="button" data-reconcile>Reconcile and resume if safe</button>' : ''}</div>`;
 }
 
 async function renderMissionDetail(id) {
@@ -382,6 +534,117 @@ async function renderMissionDetail(id) {
       ),
       decision?.memoryReferences,
     )}</section>`;
+}
+
+async function renderMissionWorkspace(id) {
+  const data = await detail(id);
+  const decision = data.decision;
+  const canCancel = [
+    'CREATED',
+    'AWAITING_FUNDING_APPROVAL',
+    'AWAITING_BASE_APPROVAL',
+    'RECOVERING',
+  ].includes(data.mission.status);
+  const canRun = data.mission.status === 'CREATED';
+  const hasPreview = state.discovery.has(id);
+  app.innerHTML = `<p class="eyebrow"><a href="/dashboard/missions">Missions</a> / ${escapeHtml(shortId(id))}</p>
+    ${pageHead('Mission workspace', data.mission.objective, `Mission ${data.mission.id}`, `<div class="workspace-actions">${status(data.mission.status)}${canRun ? `<button class="button" type="button" data-run ${hasPreview ? '' : 'disabled'}>Run Mission</button>` : ''}${canCancel ? '<button class="button secondary" type="button" data-cancel>Cancel</button>' : ''}</div>`)}
+    <section class="mission-summary panel panel-pad"><div class="receipt"><div class="receipt-item wide"><span>Mission ID</span><strong class="mono wrap">${escapeHtml(data.mission.id)}</strong></div><div class="receipt-item"><span>Status</span><strong>${escapeHtml(data.mission.status)}</strong></div><div class="receipt-item"><span>Budget</span><strong>${escapeHtml(data.mission.budget)} ${escapeHtml(data.mission.constraints?.budgetCurrency || 'USDC')}</strong></div><div class="receipt-item"><span>Created</span><strong>${escapeHtml(fmtDate(data.mission.createdAt))}</strong></div><div class="receipt-item"><span>Updated</span><strong>${escapeHtml(fmtDate(data.mission.updatedAt))}</strong></div><div class="receipt-item wide"><span>Capabilities</span><strong>${escapeHtml((data.mission.constraints?.capabilities || data.capabilities || []).join(', ') || 'Inferred from objective')}</strong></div></div><details class="advanced"><summary>Mission constraints</summary><pre class="technical-detail">${escapeHtml(JSON.stringify(data.mission.constraints || {}, null, 2))}</pre></details>${canRun && !hasPreview ? '<p class="notice">Discover real candidates before starting the paid workflow.</p>' : ''}<p class="caption" data-action-status></p></section>
+    ${pipelineFor(data)}
+    <section class="section">${discoveryPanel(data)}</section>
+    <section class="section">${memoryImpact(data.memory.trace)}</section>
+    <section class="section split"><div class="why"><p class="eyebrow">Sibyl-informed routing</p><h2>WHY THIS AGENT?</h2>${decision ? `<ul>${(decision.why.length ? decision.why : ['Selected using available capability, cost, and Sibyl evidence.']).map((reason) => `<li>${escapeHtml(reason)}</li>`).join('')}</ul>` : '<p class="caption">No execution decision has been persisted yet. Use discovery for a read-only preview.</p>'}</div><div class="panel panel-pad"><div class="section-heading"><h2>Routing decision</h2>${decision?.confidence !== undefined ? `<span class="mono caption">${percent(decision.confidence)} confidence</span>` : ''}</div>${decision ? `<p class="eyebrow">Selected provider</p><h3 class="mono">${escapeHtml(decision.selectedAgentId || 'Unknown')}</h3><div class="decision-quote">${escapeHtml(decision.reason || 'Decision stored without an explanation.')}</div>` : '<p class="caption">Awaiting execution routing.</p>'}</div></section>
+    <section class="section">${persistedRoutingPanel(decision)}</section>
+    <section class="section"><div class="section-heading"><h2>Historical performance</h2><span class="caption">Real Sibyl outcomes relevant to this mission</span></div>${agentCards(data.agents, decision?.selectedAgentId)}</section>
+    <section class="section split"><div><div class="section-heading"><h2>Memory read before decision</h2><a href="/dashboard/memory?mission=${encodeURIComponent(id)}">Open explorer</a></div><p class="caption">Recall query: ${escapeHtml(data.memory.query || 'No query recorded')}</p>${memoryCards(
+      data.memory.records.filter((record) =>
+        decision?.memoryReferences.includes(record.sibylRecordId),
+      ),
+      decision?.memoryReferences,
+    )}</div><aside class="stack">${virtualsPanel(data)}${verificationPanel(data)}</aside></section>
+    <section class="section split"><div>${resultAndEvidence(data)}</div><aside class="stack">${basePanel(data)}${recoveryPanel(data)}</aside></section>
+    <section class="section"><div class="section-heading"><h2>Lifecycle timeline</h2><a href="/dashboard/activity?mission=${encodeURIComponent(id)}">Full activity</a></div>${activityList(data)}</section>
+    <section class="section"><div class="section-heading"><h2>Memory written afterward</h2><span class="caption">New real evidence available to future routing</span></div>${memoryCards(data.memory.trace?.writtenAfterward || [], decision?.memoryReferences)}</section>`;
+
+  const note = document.querySelector('[data-action-status]');
+  const act = async (button, message, request) => {
+    button.disabled = true;
+    note.textContent = message;
+    try {
+      await request();
+      state.overview = null;
+      state.details.delete(id);
+      await route(true);
+    } catch (error) {
+      note.textContent = error instanceof Error ? error.message : 'The operation failed.';
+      button.disabled = false;
+    }
+  };
+  document.querySelectorAll('[data-discover]').forEach((button) =>
+    button.addEventListener('click', () =>
+      act(button, 'Reading Virtuals discovery and Sibyl memory...', async () => {
+        const capabilities = data.mission.constraints?.capabilities || data.capabilities;
+        const preview = await protectedRequest('/api/v1/virtuals/discovery', {
+          method: 'POST',
+          body: {
+            missionId: id,
+            objective: data.mission.objective,
+            capabilities,
+            candidateLimit: data.mission.constraints?.runner?.candidateLimit || 5,
+          },
+        });
+        state.discovery.set(id, preview);
+      }),
+    ),
+  );
+  document
+    .querySelector('[data-run]')
+    ?.addEventListener('click', (event) =>
+      act(event.currentTarget, 'Queuing mission. Funding still requires approval.', () =>
+        protectedRequest(`/api/v1/missions/${encodeURIComponent(id)}/run`, { method: 'POST' }),
+      ),
+    );
+  document
+    .querySelector('[data-cancel]')
+    ?.addEventListener('click', (event) =>
+      act(event.currentTarget, 'Cancelling mission...', () =>
+        protectedRequest(`/api/v1/missions/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+      ),
+    );
+  document.querySelector('[data-approve-acp]')?.addEventListener('click', (event) =>
+    act(event.currentTarget, 'Persisting exact ACP approval and resuming...', () =>
+      protectedRequest(`/api/v1/missions/${encodeURIComponent(id)}/approve-acp-spend`, {
+        method: 'POST',
+        body: { approved: true },
+      }),
+    ),
+  );
+  document.querySelector('[data-approve-base]')?.addEventListener('click', (event) =>
+    act(event.currentTarget, 'Persisting separate Base approval and resuming...', () =>
+      protectedRequest(`/api/v1/missions/${encodeURIComponent(id)}/approve-base-settlement`, {
+        method: 'POST',
+        body: { approved: true },
+      }),
+    ),
+  );
+  document.querySelector('[data-reconcile]')?.addEventListener('click', (event) =>
+    act(event.currentTarget, 'Starting durable reconciliation...', () =>
+      protectedRequest(`/api/v1/missions/${encodeURIComponent(id)}/reconcile`, {
+        method: 'POST',
+      }),
+    ),
+  );
+  if (
+    ['QUEUED', 'PLANNING', 'SELECTING_AGENT', 'EXECUTING', 'VERIFYING', 'RECOVERING'].includes(
+      data.mission.status,
+    )
+  ) {
+    state.pollTimer = window.setTimeout(() => {
+      state.overview = null;
+      state.details.delete(id);
+      route(true);
+    }, 3000);
+  }
 }
 
 async function contextualDetail() {
@@ -567,6 +830,9 @@ function activeNavigation(routeName) {
 }
 
 async function route(force = false) {
+  if (state.pollTimer) window.clearTimeout(state.pollTimer);
+  state.pollTimer = null;
+  updateLockControl();
   const request = ++state.request;
   if (force) {
     state.overview = null;
@@ -578,12 +844,15 @@ async function route(force = false) {
   const path = location.pathname.replace(/\/$/, '') || '/dashboard';
   let routeName = 'overview';
   try {
-    if (path === '/dashboard/missions') {
+    if (path === '/dashboard/missions/new') {
+      routeName = 'missions';
+      await renderNewMission();
+    } else if (path === '/dashboard/missions') {
       routeName = 'missions';
       await renderMissions();
     } else if (path.startsWith('/dashboard/missions/')) {
       routeName = 'missions';
-      await renderMissionDetail(decodeURIComponent(path.split('/').at(-1)));
+      await renderMissionWorkspace(decodeURIComponent(path.split('/').at(-1)));
     } else if (path === '/dashboard/agents') {
       routeName = 'agents';
       await renderAgents();
@@ -625,9 +894,17 @@ document.addEventListener('click', (event) => {
 
 window.addEventListener('popstate', () => route());
 refreshButton.addEventListener('click', () => route(true));
+lockButton.addEventListener('click', () => {
+  sessionStorage.removeItem(operatorTokenStorageKey);
+  state.overview = null;
+  state.details.clear();
+  state.discovery.clear();
+  route(true);
+});
 menuButton.addEventListener('click', () => {
   const open = document.body.classList.toggle('nav-open');
   menuButton.setAttribute('aria-expanded', String(open));
 });
 
+updateLockControl();
 route();

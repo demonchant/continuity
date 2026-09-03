@@ -62,8 +62,8 @@ describe('economic decision UI and API', () => {
     });
 
     const dashboard = await request(app).get('/economic-decisions');
-    expect(dashboard.status).toBe(200);
-    expect(dashboard.text).toContain('Sibyl Memory → Agent Decision → Base Action');
+    expect(dashboard.status).toBe(302);
+    expect(dashboard.headers.location).toBe('/dashboard/missions');
 
     const payload = {
       missionId: mission.id,

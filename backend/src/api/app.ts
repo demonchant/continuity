@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import helmet from 'helmet';
 import type { Logger } from 'pino';
+import type { OperatorApprovalService } from '../approvals/operator-approval-service.js';
 import { pinoHttp } from 'pino-http';
 import type { ApplicationConfig } from '../config/index.js';
 import {
@@ -27,6 +28,7 @@ import type { VirtualsExecutionService } from '../integrations/virtuals/virtuals
 import type { VirtualsJobRepository } from '../integrations/virtuals/virtuals-job-repository.js';
 import { createMissionRunnerRouter } from '../runner/mission-runner-routes.js';
 import type { MissionWorker } from '../runner/mission-worker.js';
+import type { MissionPlanCaps } from '../runner/mission-plan.js';
 import { createHealthRouter } from './health/health-routes.js';
 import { createReadinessRouter } from './health/health-routes.js';
 import type { HealthService } from './health/health-service.js';
@@ -57,6 +59,11 @@ export interface ApplicationDependencies {
   };
   readonly runner?: {
     readonly service: MissionWorker;
+    readonly approvals: OperatorApprovalService;
+    readonly virtuals: VirtualsExecutionService;
+    readonly jobs: VirtualsJobRepository;
+    readonly basePayments?: BasePaymentService;
+    readonly runnerCaps: MissionPlanCaps;
     readonly operatorToken: string;
   };
   readonly dashboard?: DashboardService;
@@ -142,7 +149,18 @@ export function createApp(dependencies: ApplicationDependencies) {
   if (dependencies.runner) {
     app.use(
       '/api/v1/missions',
-      createMissionRunnerRouter(dependencies.runner.service, dependencies.runner.operatorToken),
+      createMissionRunnerRouter({
+        worker: dependencies.runner.service,
+        missions: dependencies.missionService,
+        jobs: dependencies.runner.jobs,
+        virtuals: dependencies.runner.virtuals,
+        approvals: dependencies.runner.approvals,
+        ...(dependencies.runner.basePayments
+          ? { basePayments: dependencies.runner.basePayments }
+          : {}),
+        runnerCaps: dependencies.runner.runnerCaps,
+        operatorToken: dependencies.runner.operatorToken,
+      }),
     );
   }
 

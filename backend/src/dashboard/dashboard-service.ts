@@ -1,4 +1,5 @@
 import { inferMissionCapabilities } from '../agents/mission-agent-candidates.js';
+import type { OperatorApprovalService } from '../approvals/operator-approval-service.js';
 import type { BaseTransactionRepository } from '../integrations/base/base-transaction-repository.js';
 import type { BaseTransaction } from '../integrations/base/base-transaction.js';
 import type { VirtualsJobRepository } from '../integrations/virtuals/virtuals-job-repository.js';
@@ -27,6 +28,7 @@ function safeMission(mission: Mission) {
     id: mission.id,
     objective: mission.objective,
     budget: mission.budget,
+    constraints: mission.constraints,
     status: mission.status,
     currentStep: mission.currentStep,
     ...(mission.recoveryState ? { recoveryState: mission.recoveryState } : {}),
@@ -260,16 +262,37 @@ export class DashboardService {
     private readonly memory: MemoryService,
     private readonly jobs?: VirtualsJobRepository,
     private readonly transactions?: BaseTransactionRepository,
+    private readonly approvals?: OperatorApprovalService,
+    private readonly productConfig?: {
+      readonly virtuals?: { readonly chainId: number; readonly maxJobUsdc: number };
+      readonly base?: {
+        readonly enabled: boolean;
+        readonly network: string;
+        readonly chainId: number;
+        readonly asset: string;
+        readonly recipient?: string;
+        readonly maximumAmount: string;
+      };
+    },
   ) {}
 
   async overview() {
     const missions = await this.missions.list();
     return {
       generatedAt: new Date().toISOString(),
+      product: this.productConfig ?? {},
       metrics: {
         total: missions.length,
         active: missions.filter(({ status }) =>
-          ['PLANNING', 'SELECTING_AGENT', 'EXECUTING', 'VERIFYING', 'RECOVERING'].includes(status),
+          [
+            'PLANNING',
+            'SELECTING_AGENT',
+            'EXECUTING',
+            'AWAITING_FUNDING_APPROVAL',
+            'VERIFYING',
+            'AWAITING_BASE_APPROVAL',
+            'RECOVERING',
+          ].includes(status),
         ).length,
         completed: missions.filter(({ status }) => status === 'COMPLETED').length,
         failed: missions.filter(({ status }) => status === 'FAILED').length,
@@ -298,12 +321,20 @@ export class DashboardService {
         message: 'A public judge receipt is available only for terminal missions',
       });
     }
-    return this.missionDetail(missionId);
+    const { approvals: _operatorApprovals, ...publicReceipt } = await this.missionDetail(missionId);
+    return publicReceipt;
   }
 
   async missionDetail(missionId: string) {
     const mission = await this.missions.get(missionId);
-    const capabilities = inferMissionCapabilities(mission.objective);
+    const explicitCapabilities = Array.isArray(mission.constraints.capabilities)
+      ? mission.constraints.capabilities.filter(
+          (value): value is string => typeof value === 'string' && value.trim().length > 0,
+        )
+      : [];
+    const capabilities = [
+      ...new Set([...inferMissionCapabilities(mission.objective), ...explicitCapabilities]),
+    ];
     const categories = [
       'mission',
       'agent',
@@ -313,7 +344,7 @@ export class DashboardService {
       'experience',
       'recovery_checkpoint',
     ] as const;
-    const [decisionRecall, missionRecall, jobs, transactions] = await Promise.all([
+    const [decisionRecall, missionRecall, jobs, transactions, approvals] = await Promise.all([
       this.memory.recall({
         mission: mission.objective,
         capabilities,
@@ -328,6 +359,7 @@ export class DashboardService {
       }),
       this.jobs?.findByMissionId(missionId) ?? Promise.resolve([]),
       this.transactions?.findByMissionId(missionId) ?? Promise.resolve([]),
+      this.approvals?.list(missionId) ?? Promise.resolve([]),
     ]);
     const recalled = mergeRecallRecords(decisionRecall.records, missionRecall.records);
     const records = recalled.map(({ record }) => record);
@@ -410,6 +442,8 @@ export class DashboardService {
         : null,
       jobs: jobs.map(safeJob),
       transactions: transactions.map(safeTransaction),
+      approvals,
+      product: this.productConfig ?? {},
     };
   }
 }

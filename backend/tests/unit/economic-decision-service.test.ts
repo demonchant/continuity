@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import pino from 'pino';
 import { describe, expect, it, vi } from 'vitest';
+import type { OperatorApprovalService } from '../../src/approvals/operator-approval-service.js';
 import type { ExternalVirtualsAgent } from '../../src/agents/agent.js';
 import { EconomicActionService } from '../../src/economics/economic-action-service.js';
 import { EconomicDecisionService } from '../../src/economics/economic-decision-service.js';
@@ -159,6 +160,7 @@ describe('memory-driven economic decisions', () => {
       new RecoveryService(new InMemoryRecoveryRepository(), memoryService, logger),
       memoryService,
       logger,
+      {} as OperatorApprovalService,
       {
         recipient: '0x2222222222222222222222222222222222222222',
         maxPaymentAmount: '1.00',

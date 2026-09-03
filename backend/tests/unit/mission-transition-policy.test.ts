@@ -20,7 +20,9 @@ describe('mission transition policy', () => {
     'PLANNING',
     'SELECTING_AGENT',
     'EXECUTING',
+    'AWAITING_FUNDING_APPROVAL',
     'VERIFYING',
+    'AWAITING_BASE_APPROVAL',
     'RECOVERING',
   ])('allows cancellation from nonterminal %s', (current) => {
     expect(isMissionTransitionAllowed(current, 'CANCELLED')).toBe(true);

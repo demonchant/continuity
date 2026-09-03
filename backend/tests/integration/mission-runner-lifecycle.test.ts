@@ -1,5 +1,6 @@
 import pino from 'pino';
 import { describe, expect, it, vi } from 'vitest';
+import { OperatorApprovalService } from '../../src/approvals/operator-approval-service.js';
 import type { RecalledMemory } from '../../src/memory/memory-record.js';
 import type { ProviderRecallQuery } from '../../src/memory/memory-provider.js';
 import { MemoryService } from '../../src/memory/memory-service.js';
@@ -22,6 +23,7 @@ import { BasePaymentService } from '../../src/integrations/base/base-payment-ser
 import { MissionRunner } from '../../src/runner/mission-runner.js';
 import { InMemoryBaseTransactionRepository } from '../support/in-memory-base-transaction-repository.js';
 import { InMemoryMissionRepository } from '../support/in-memory-mission-repository.js';
+import { InMemoryOperatorApprovalRepository } from '../support/in-memory-operator-approval-repository.js';
 import { InMemoryRecoveryRepository } from '../support/in-memory-recovery-repository.js';
 import { InMemoryVirtualsJobRepository } from '../support/in-memory-virtuals-job-repository.js';
 import { MockMemoryProvider } from '../support/mock-memory-provider.js';
@@ -122,13 +124,14 @@ class ConfirmingBaseGateway implements BaseTransactionGateway {
 }
 
 describe('complete autonomous mission lifecycle', () => {
-  it('uses fresh Sibyl failure experience to choose a fallback, verifies it, and confirms Base', async () => {
+  it('stops after one funded provider attempt and never auto-retries or settles Base', async () => {
     const provider = new LearningMemoryProvider();
     const memory = new MemoryService(provider, logger, {
       now: () => new Date('2026-08-22T12:00:00.000Z'),
     });
     const missions = new MissionService(new InMemoryMissionRepository());
     const recovery = new RecoveryService(new InMemoryRecoveryRepository(), memory, logger);
+    const approvals = new OperatorApprovalService(new InMemoryOperatorApprovalRepository());
     const source = new LifecycleVirtualsSource();
     const virtuals = new VirtualsExecutionService(
       source,
@@ -137,6 +140,7 @@ describe('complete autonomous mission lifecycle', () => {
       recovery,
       new VerificationService(memory, logger),
       logger,
+      approvals,
       { maxJobUsdc: 1, pollIntervalMs: 1, timeoutMs: 1_000, sleep: () => Promise.resolve() },
     );
     const baseGateway = new ConfirmingBaseGateway();
@@ -146,6 +150,7 @@ describe('complete autonomous mission lifecycle', () => {
       recovery,
       memory,
       logger,
+      approvals,
       {
         recipient: agentBAddress,
         maxPaymentAmount: '1.00',
@@ -177,36 +182,14 @@ describe('complete autonomous mission lifecycle', () => {
       candidateLimit: 10,
     });
 
-    const result = await runner.run(mission.id);
-
-    expect(result.mission.status).toBe('COMPLETED');
-    expect(result.attempts).toHaveLength(2);
-    expect(result.attempts[0]).toMatchObject({
-      agentId: 'virtuals-agent-a',
-      status: 'VERIFICATION_FAILED',
+    await expect(runner.run(mission.id)).rejects.toMatchObject({
+      code: 'MISSION_RUN_FAILED',
+      details: { attempts: [expect.objectContaining({ status: 'VERIFICATION_FAILED' })] },
     });
-    expect(result.attempts[1]).toMatchObject({
-      agentId: 'virtuals-agent-b',
-      status: 'VERIFIED',
-      decision: {
-        memoryReferences: expect.arrayContaining([expect.stringContaining('sibyl-record-')]),
-      },
-    });
-    expect(result.selectedAgentId).toBe('virtuals-agent-b');
-    expect(result.baseTransaction).toMatchObject({
-      transactionHash,
-      status: 'CONFIRMED',
-      amount: '0.10',
-      action: 'MISSION_SUCCESS_SETTLEMENT',
-      asset: 'USDC',
-    });
+    expect(await missions.get(mission.id)).toMatchObject({ status: 'FAILED' });
     expect(source.rejectJob).toHaveBeenCalledOnce();
-    expect(source.completeJob).toHaveBeenCalledOnce();
-    expect(baseGateway.sendTokenTransfer).toHaveBeenCalledOnce();
-    expect(baseGateway.sendTokenTransfer).toHaveBeenCalledWith(
-      expect.objectContaining({ amountBaseUnits: 100000n }),
-    );
-    expect(provider.searches.length).toBeGreaterThanOrEqual(3);
+    expect(source.completeJob).not.toHaveBeenCalled();
+    expect(baseGateway.sendTokenTransfer).not.toHaveBeenCalled();
     expect(provider.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -214,23 +197,8 @@ describe('complete autonomous mission lifecycle', () => {
           agentId: 'virtuals-agent-a',
           capability: 'fact-verification',
         }),
-        expect.objectContaining({
-          category: 'experience',
-          agentId: 'virtuals-agent-b',
-          success: true,
-        }),
-        expect.objectContaining({
-          category: 'outcome',
-          providerReference: transactionHash,
-        }),
       ]),
     );
-    expect(provider.checkpoints.at(-1)?.record.recovery).toMatchObject({
-      missionState: 'COMPLETED',
-      paymentStatus: 'COMPLETED',
-      verificationStatus: 'PASS',
-      nextAction: 'none',
-    });
   });
 
   it('stops at the failure threshold instead of entering an autonomous loop', async () => {
@@ -255,7 +223,7 @@ describe('complete autonomous mission lifecycle', () => {
     );
 
     await expect(runner.run(mission.id)).rejects.toMatchObject({ code: 'MISSION_RUN_FAILED' });
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledOnce();
     expect(await missions.get(mission.id)).toMatchObject({ status: 'FAILED' });
     expect(provider.records).toEqual(
       expect.arrayContaining([

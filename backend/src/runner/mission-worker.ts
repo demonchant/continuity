@@ -64,6 +64,40 @@ export class MissionWorker {
     return queued;
   }
 
+  async resumeApproved(
+    missionId: string,
+    expectedStatus: 'AWAITING_FUNDING_APPROVAL' | 'AWAITING_BASE_APPROVAL',
+  ): Promise<Mission> {
+    const mission = await this.missions.get(missionId);
+    if (mission.status === 'QUEUED') return mission;
+    if (mission.status !== expectedStatus)
+      throw new Error(`Mission cannot resume from ${mission.status}`);
+    const queued = await this.missions.transition(
+      missionId,
+      'QUEUED',
+      'Explicit operator approval persisted; resume idempotent execution',
+    );
+    await this.repository.audit({
+      missionId,
+      workerId: this.workerId,
+      action: 'MISSION_APPROVED_AND_RESUMED',
+      status: 'QUEUED',
+      attempt: this.attempts.get(missionId) ?? 0,
+      details: { approvalFor: expectedStatus },
+    });
+    void this.tick();
+    return queued;
+  }
+
+  async reconcileNow(missionId: string): Promise<Mission> {
+    const mission = await this.missions.get(missionId);
+    if (mission.status !== 'RECOVERING') {
+      throw new Error(`Mission cannot be reconciled from ${mission.status}`);
+    }
+    void this.recoverMission(mission);
+    return mission;
+  }
+
   async start(): Promise<void> {
     if (this.timer || this.stopping) throw new Error('Mission worker cannot be started twice');
     const acquired = await this.repository.acquireLease(this.workerId, this.leaseMs);
@@ -171,16 +205,22 @@ export class MissionWorker {
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unknown worker execution failure';
-      await this.repository.reconciled(mission.id, 'FAILED', reason);
+      const paused =
+        error instanceof Error &&
+        'code' in error &&
+        ['MISSION_AWAITING_FUNDING_APPROVAL', 'MISSION_AWAITING_BASE_APPROVAL'].includes(
+          String(error.code),
+        );
+      await this.repository.reconciled(mission.id, paused ? 'AWAITING_OPERATOR' : 'FAILED', reason);
       await this.repository.audit({
         missionId: mission.id,
         workerId: this.workerId,
         action: 'MISSION_EXECUTION',
-        status: 'FAILED',
+        status: paused ? 'PAUSED' : 'FAILED',
         attempt,
         details: { reason },
       });
-      this.logger.error(
+      this.logger[paused ? 'info' : 'error'](
         { err: error, event: 'mission.worker.execution_failed', missionId: mission.id },
         'Mission worker execution failed',
       );

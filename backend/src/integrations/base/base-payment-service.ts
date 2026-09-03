@@ -1,5 +1,6 @@
 import type { Logger } from 'pino';
 import { isAddress, parseUnits } from 'viem';
+import type { OperatorApprovalService } from '../../approvals/operator-approval-service.js';
 import type { MemoryService } from '../../memory/memory-service.js';
 import type { Mission } from '../../missions/mission.js';
 import type { RecoveryService } from '../../recovery/recovery-service.js';
@@ -43,6 +44,9 @@ export class BasePaymentService {
   private readonly maxWei: bigint;
   readonly supportedAsset: 'ETH' | 'USDC';
   readonly paymentRecipient: `0x${string}`;
+  readonly maximumPaymentAmount: string;
+  readonly network: string;
+  readonly chainId: number;
   private readonly decimals: number;
 
   constructor(
@@ -51,6 +55,7 @@ export class BasePaymentService {
     private readonly recovery: RecoveryService,
     private readonly memory: MemoryService,
     private readonly logger: Logger,
+    private readonly approvals: OperatorApprovalService,
     private readonly options: BasePaymentOptions,
   ) {
     if (!isAddress(options.recipient)) {
@@ -62,6 +67,9 @@ export class BasePaymentService {
     }
     this.supportedAsset = options.asset ?? 'ETH';
     this.paymentRecipient = options.recipient;
+    this.maximumPaymentAmount = options.maxPaymentAmount;
+    this.network = gateway.network;
+    this.chainId = gateway.chainId;
     this.decimals = this.supportedAsset === 'USDC' ? 6 : 18;
     if (
       this.supportedAsset === 'USDC' &&
@@ -122,6 +130,21 @@ export class BasePaymentService {
         false,
       );
     }
+    const approval = await this.approvals.authorized({
+      missionId: request.mission.id,
+      kind: 'BASE_SETTLEMENT',
+      actionId: request.actionId,
+      referenceId: request.verificationId,
+      amount: request.amount,
+      currency: this.supportedAsset,
+    });
+    if (!approval) {
+      throw new BaseIntegrationError(
+        'BASE_APPROVAL_REQUIRED',
+        'Base mainnet settlement is awaiting explicit operator approval',
+        true,
+      );
+    }
     let transaction =
       existing ??
       (await this.transactions.createOrGet({
@@ -178,6 +201,7 @@ export class BasePaymentService {
           };
         },
       );
+      await this.approvals.consume(approval.id);
       const hash = broadcast.receipt.transactionHash;
       if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) {
         throw new BaseIntegrationError(

@@ -38,7 +38,7 @@
         </nav>
         <div class="sidebar-foot">
           <span class="live-dot" aria-hidden="true"></span>
-          <div><strong>System observer</strong><small>Read-only · secrets redacted</small></div>
+          <div><strong>Operator session</strong><small>Protected · secrets redacted</small></div>
         </div>
       </aside>
       <section class="workspace">
@@ -53,8 +53,11 @@
           </button>
           <div class="environment"><span></span>Autonomous operations</div>
           <div class="topbar-meta">
-            <span id="last-updated">Awaiting telemetry</span
-            ><button
+            <span id="last-updated">Awaiting telemetry</span>
+            <button id="lock-button" class="button secondary compact" type="button" hidden>
+              Lock dashboard
+            </button>
+            <button
               id="refresh-button"
               class="icon-button"
               type="button"

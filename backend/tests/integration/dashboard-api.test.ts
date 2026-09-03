@@ -194,12 +194,21 @@ describe('Phase 13 dashboard and Phase 14 Judge Mode', () => {
     expect(page.status).toBe(200);
     expect(page.text).toContain('Autonomous operations');
     expect(page.text).toContain('/continuity-ui/app.js');
+    expect(page.text).toContain('Lock dashboard');
     const client = await request(application).get('/continuity-ui/app.js');
     expect(client.status).toBe(200);
     expect(client.text).toContain('WHY THIS AGENT?');
     expect(client.text).toContain('What was written afterward');
     expect(client.text).toContain('DASHBOARD_AUTH_REQUIRED');
     expect(client.text).toContain('operator-token');
+    expect(client.text).toContain('New Mission');
+    expect(client.text).toContain('Discover Agents');
+    expect(client.text).toContain('Approve ACP spend');
+    expect(client.text).toContain('Approve Base mainnet transaction');
+    expect(client.text).toContain('sessionStorage');
+    expect(client.text).not.toContain('VIRTUALS_DISCOVERY_OAUTH_ACCESS_TOKEN');
+    expect(client.text).not.toContain('VIRTUALS_SIGNER_PRIVATE_KEY');
+    expect(client.text).not.toContain('DATABASE_URL');
     expect((await request(application).get('/dashboard/judge')).status).toBe(200);
 
     const response = await request(application).get(`/api/v1/dashboard/missions/${mission.id}`);

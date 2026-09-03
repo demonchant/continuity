@@ -39,6 +39,8 @@ export interface MemoryDecisionCandidate {
   readonly agentId: string;
   readonly name: string;
   readonly offeringName?: string;
+  readonly offeringId?: string;
+  readonly slaMinutes?: number;
   readonly capabilities: readonly string[];
   readonly price?: MemoryCost;
   readonly compatible?: boolean;

@@ -5,6 +5,7 @@ export const persistedVirtualsJobStates = [
   'CREATED',
   'OPEN',
   'BUDGET_PROPOSED',
+  'AWAITING_FUNDING_APPROVAL',
   'FUNDED',
   'SUBMITTED',
   'COMPLETED',

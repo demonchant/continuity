@@ -22,6 +22,7 @@ const executeSchema = z
 const discoverySchema = z
   .object({
     objective: z.string().trim().min(1).max(2_000),
+    missionId: z.string().uuid().optional(),
     capabilities: z.array(z.string().trim().min(1).max(100)).min(1).max(20),
     candidateLimit: z.number().int().min(1).max(20).default(10),
   })
@@ -76,12 +77,27 @@ export function createVirtualsRouter(
     asyncHandler(async (request, response) => {
       try {
         const input = request.body as z.infer<typeof discoverySchema>;
+        if (input.missionId) {
+          const mission = await missions.get(input.missionId);
+          if (mission.objective !== input.objective) {
+            throw new AppError({
+              statusCode: 409,
+              code: 'DISCOVERY_MISSION_MISMATCH',
+              message: 'Discovery objective does not match the persisted mission',
+            });
+          }
+          response.json({
+            success: true,
+            data: await execution.preview(mission, input.capabilities, input.candidateLimit),
+          });
+          return;
+        }
         const candidates = await execution.discover({
           missionObjective: input.objective,
           capabilities: input.capabilities,
           limit: input.candidateLimit,
         });
-        response.json({ success: true, data: { candidates } });
+        response.json({ success: true, data: { candidates, decision: null } });
       } catch (error) {
         publicError(error);
       }

@@ -1,5 +1,6 @@
 import type { Logger } from 'pino';
 import { InMemoryAgentRegistry } from '../../agents/agent-registry.js';
+import type { OperatorApprovalService } from '../../approvals/operator-approval-service.js';
 import { DecisionEngine } from '../../decisions/decision-engine.js';
 import type { AgentDecision } from '../../decisions/decision.js';
 import type { MemoryService } from '../../memory/memory-service.js';
@@ -37,11 +38,16 @@ export interface VirtualsExecutionResult {
   readonly lifecycle: {
     readonly observedStates: readonly string[];
     readonly initialState: 'CREATED';
-    readonly fundingState: 'NOT_REQUIRED' | 'FUNDED';
+    readonly fundingState: 'NOT_REQUIRED' | 'AWAITING_APPROVAL' | 'FUNDED';
     readonly settlementState: 'COMPLETED' | 'REJECTED';
     readonly proposedBudget?: { readonly amount: string; readonly currency: string };
     readonly deliverable?: JsonValue;
   };
+}
+
+export interface VirtualsRoutingPreview {
+  readonly candidates: readonly VirtualsAgentCandidate[];
+  readonly decision: AgentDecision;
 }
 
 export interface VirtualsExecutionOptions {
@@ -97,6 +103,7 @@ function positiveAmount(value: string): number | null {
 }
 
 export class VirtualsExecutionService {
+  readonly maximumJobUsdc: number;
   private readonly pollIntervalMs: number;
   private readonly timeoutMs: number;
   private readonly now: () => number;
@@ -109,8 +116,10 @@ export class VirtualsExecutionService {
     private readonly recovery: RecoveryService,
     private readonly verification: VerificationService,
     private readonly logger: Logger,
+    private readonly approvals: OperatorApprovalService,
     private readonly options: VirtualsExecutionOptions,
   ) {
+    this.maximumJobUsdc = options.maxJobUsdc;
     this.pollIntervalMs = options.pollIntervalMs ?? 5_000;
     this.timeoutMs = options.timeoutMs ?? 15 * 60_000;
     this.now = options.now ?? Date.now;
@@ -125,6 +134,31 @@ export class VirtualsExecutionService {
    */
   discover(request: VirtualsAgentDiscoveryRequest): Promise<readonly VirtualsAgentCandidate[]> {
     return this.source.discoverCandidates(request);
+  }
+
+  async preview(
+    mission: Pick<Mission, 'id' | 'objective' | 'budget'>,
+    capabilities: readonly string[],
+    candidateLimit?: number,
+  ): Promise<VirtualsRoutingPreview> {
+    const candidates = await this.source.discoverCandidates({
+      missionObjective: mission.objective,
+      capabilities,
+      ...(candidateLimit ? { limit: candidateLimit } : {}),
+    });
+    if (candidates.length === 0) {
+      throw new VirtualsProtocolError(
+        'VIRTUALS_NO_OFFERING',
+        'No compatible public Virtuals ACP offering was found',
+        true,
+      );
+    }
+    const registry = new InMemoryAgentRegistry();
+    for (const { agent } of candidates) if (!registry.get(agent.id)) registry.register(agent);
+    return {
+      candidates,
+      decision: await new DecisionEngine(registry, this.memory).preview(mission, capabilities),
+    };
   }
 
   async execute(request: ExecuteVirtualsMissionRequest): Promise<VirtualsExecutionResult> {
@@ -181,7 +215,7 @@ export class VirtualsExecutionService {
     let job: VirtualsJob | undefined;
     const observedStates: string[] = [];
     let proposedBudget: VirtualsJobSnapshot['budget'];
-    let fundingState: 'NOT_REQUIRED' | 'FUNDED' = 'NOT_REQUIRED';
+    let fundingState: 'NOT_REQUIRED' | 'AWAITING_APPROVAL' | 'FUNDED' = 'NOT_REQUIRED';
     try {
       job = await this.createOrRecoverJob(request, candidate);
       observedStates.push(job.state);
@@ -288,6 +322,7 @@ export class VirtualsExecutionService {
       };
     } catch (error) {
       const protocolError = error instanceof VirtualsProtocolError ? error : undefined;
+      if (protocolError?.code === 'VIRTUALS_FUNDING_APPROVAL_REQUIRED') throw error;
       const recoveryErrorCode =
         error instanceof Error && 'code' in error && typeof error.code === 'string'
           ? error.code
@@ -396,7 +431,8 @@ export class VirtualsExecutionService {
       if (snapshot.state === 'EXPIRED')
         throw new VirtualsProtocolError('VIRTUALS_JOB_EXPIRED', 'Virtuals ACP job expired', false);
       if (snapshot.state === 'BUDGET_PROPOSED') {
-        await this.fund(request, candidate, snapshot);
+        const approval = await this.requireFundingApproval(request, snapshot, job.id);
+        await this.fund(request, candidate, snapshot, approval.id);
         await this.jobs.update({ id: job.id, state: 'FUNDED' });
         await observed({ ...snapshot, state: 'FUNDED' });
       }
@@ -409,10 +445,49 @@ export class VirtualsExecutionService {
     );
   }
 
+  private async requireFundingApproval(
+    request: ExecuteVirtualsMissionRequest,
+    snapshot: VirtualsJobSnapshot,
+    continuityJobId: string,
+  ) {
+    if (!snapshot.budget) {
+      throw new VirtualsProtocolError(
+        'VIRTUALS_BUDGET_EXCEEDED',
+        'ACP funding requires an explicit budget proposal',
+        false,
+      );
+    }
+    const approval = await this.approvals.authorized({
+      missionId: request.mission.id,
+      kind: 'ACP_FUNDING',
+      actionId: `${request.actionId}:fund`,
+      referenceId: snapshot.jobId,
+      amount: snapshot.budget.amount,
+      currency: snapshot.budget.currency,
+    });
+    if (approval) return approval;
+    await this.jobs.update({
+      id: continuityJobId,
+      state: 'AWAITING_FUNDING_APPROVAL',
+      lifecycle: {
+        initialState: 'CREATED',
+        observedStates: ['CREATED', 'BUDGET_PROPOSED', 'AWAITING_FUNDING_APPROVAL'],
+        fundingState: 'AWAITING_APPROVAL',
+        proposedBudget: snapshot.budget,
+      },
+    });
+    throw new VirtualsProtocolError(
+      'VIRTUALS_FUNDING_APPROVAL_REQUIRED',
+      'ACP budget proposal is awaiting explicit operator approval',
+      true,
+    );
+  }
+
   private async fund(
     request: ExecuteVirtualsMissionRequest,
     candidate: VirtualsAgentCandidate,
     snapshot: VirtualsJobSnapshot,
+    approvalId: string,
   ): Promise<void> {
     if (!snapshot.budget || snapshot.budget.currency.toUpperCase() !== 'USDC') {
       throw new VirtualsProtocolError(
@@ -450,6 +525,7 @@ export class VirtualsExecutionService {
         };
       },
     );
+    await this.approvals.consume(approvalId);
     this.logger.info(
       { event: 'virtuals.job.funded', jobId: snapshot.jobId, agentId: candidate.agent.id, amount },
       'Virtuals ACP job funded',

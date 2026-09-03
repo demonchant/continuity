@@ -27,7 +27,9 @@ enum MissionStatus {
   PLANNING
   SELECTING_AGENT
   EXECUTING
+  AWAITING_FUNDING_APPROVAL
   VERIFYING
+  AWAITING_BASE_APPROVAL
   COMPLETED
   FAILED
   RECOVERING
@@ -47,6 +49,7 @@ model Mission {
   virtualsJobs          VirtualsJob[]
   baseTransactions      BaseTransaction[]
   recoveryAudits        MissionRecoveryAudit[]
+  operatorApprovals     OperatorApproval[]
   recoveryState         String?                @db.VarChar(100)
   lastHeartbeat         DateTime?              @db.Timestamptz(3)
   lastReconciliation    DateTime?              @db.Timestamptz(3)
@@ -56,6 +59,36 @@ model Mission {
 
   @@index([status, updatedAt])
   @@index([createdAt, id])
+}
+
+enum OperatorApprovalKind {
+  ACP_FUNDING
+  BASE_SETTLEMENT
+}
+
+enum OperatorApprovalStatus {
+  APPROVED
+  CONSUMED
+  CANCELLED
+}
+
+model OperatorApproval {
+  id          String                 @id @default(uuid()) @db.Uuid
+  missionId   String                 @db.Uuid
+  mission     Mission                @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  kind        OperatorApprovalKind
+  actionId    String                 @db.VarChar(200)
+  referenceId String                 @db.VarChar(300)
+  amount      Decimal                @db.Decimal(36, 18)
+  currency    String                 @db.VarChar(16)
+  status      OperatorApprovalStatus @default(APPROVED)
+  approvedAt  DateTime               @default(now()) @db.Timestamptz(3)
+  consumedAt  DateTime?              @db.Timestamptz(3)
+  createdAt   DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime               @updatedAt @db.Timestamptz(3)
+
+  @@unique([missionId, kind, actionId])
+  @@index([missionId, status, createdAt])
 }
 
 model MissionRecoveryAudit {
@@ -126,6 +159,7 @@ enum VirtualsJobState {
   CREATED
   OPEN
   BUDGET_PROPOSED
+  AWAITING_FUNDING_APPROVAL
   FUNDED
   SUBMITTED
   COMPLETED

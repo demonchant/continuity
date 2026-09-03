@@ -154,6 +154,20 @@ describe('DecisionEngine memory-driven selection', () => {
     expect(decision.decisionMemoryId).toBe('continuity-stored-decision');
   });
 
+  it('previews the same Sibyl-informed routing without writing a decision', async () => {
+    const provider = new MockMemoryProvider();
+    provider.searchResult = [memoryRecord('failure-a', 'agent-a', 'failure')];
+    const decision = await new DecisionEngine(registry(), service(provider), {
+      now: () => now,
+    }).preview(mission);
+
+    expect(decision.selectedAgent.id).toBe('agent-b');
+    expect(decision.memoryReferences).toEqual(['sibyl-failure-a']);
+    expect(decision).not.toHaveProperty('decisionMemoryId');
+    expect(provider.records).toEqual([]);
+    expect(provider.events).toEqual([]);
+  });
+
   it('deletion test removes historical behavior instead of replacing Sibyl', async () => {
     const withMemoryProvider = new MockMemoryProvider();
     withMemoryProvider.searchResult = [memoryRecord('failure-a', 'agent-a', 'failure')];

@@ -84,16 +84,14 @@ export function createPortalRouter(dependencies: {
     asyncHandler(async (request, response) => {
       const principal = accessPrincipal(response);
       const body = request.body as z.infer<typeof memberInvitationSchema>;
-      response
-        .status(201)
-        .json({
-          success: true,
-          data: await dependencies.access.inviteMember({
-            organizationId: principal.organizationId,
-            email: body.email,
-            role: body.role,
-          }),
-        });
+      response.status(201).json({
+        success: true,
+        data: await dependencies.access.inviteMember({
+          organizationId: principal.organizationId,
+          email: body.email,
+          role: body.role,
+        }),
+      });
     }),
   );
 
@@ -256,12 +254,10 @@ export function createPortalRouter(dependencies: {
         currency,
       });
       await dependencies.worker.resumeApproved(mission.id, 'AWAITING_FUNDING_APPROVAL');
-      response
-        .status(202)
-        .json({
-          success: true,
-          data: { approval: { ...approval, authorization: 'ONE_TIME', recurring: false } },
-        });
+      response.status(202).json({
+        success: true,
+        data: { approval: { ...approval, authorization: 'ONE_TIME', recurring: false } },
+      });
     }),
   );
 
@@ -318,20 +314,18 @@ export function createPortalRouter(dependencies: {
         currency: base.supportedAsset,
       });
       await dependencies.worker.resumeApproved(mission.id, 'AWAITING_BASE_APPROVAL');
-      response
-        .status(202)
-        .json({
-          success: true,
-          data: {
-            approval: {
-              ...approval,
-              authorization: 'ONE_TIME',
-              recurring: false,
-              network: base.network,
-              recipient: base.paymentRecipient,
-            },
+      response.status(202).json({
+        success: true,
+        data: {
+          approval: {
+            ...approval,
+            authorization: 'ONE_TIME',
+            recurring: false,
+            network: base.network,
+            recipient: base.paymentRecipient,
           },
-        });
+        },
+      });
     }),
   );
   return router;

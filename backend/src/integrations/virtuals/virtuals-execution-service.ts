@@ -16,6 +16,7 @@ import type {
   VirtualsJobSnapshot,
 } from './virtuals-agent-source.js';
 import { VirtualsProtocolError } from './virtuals-errors.js';
+import { analyzeOfferingInputCompatibility } from './offering-input-compatibility.js';
 import type { VirtualsJobRepository } from './virtuals-job-repository.js';
 import type { VirtualsJob } from './virtuals-job.js';
 
@@ -102,6 +103,38 @@ function positiveAmount(value: string): number | null {
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
 
+function providerInput(mission: Pick<Mission, 'constraints'>): JsonObject {
+  const explicit = mission.constraints.acpRequirements;
+  return typeof explicit === 'object' && explicit !== null && !Array.isArray(explicit)
+    ? explicit
+    : mission.constraints;
+}
+
+function budgetCurrency(mission: Pick<Mission, 'constraints'>): string {
+  return typeof mission.constraints.budgetCurrency === 'string'
+    ? mission.constraints.budgetCurrency.toUpperCase()
+    : 'USDC';
+}
+
+function withinBudget(
+  candidate: VirtualsAgentCandidate,
+  missionBudget: number | null,
+  currency: string | undefined,
+): boolean {
+  if (!candidate.agent.cost.amount) return true;
+  const advertisedCost = positiveAmount(candidate.agent.cost.amount);
+  const sameCurrency =
+    !currency ||
+    !candidate.agent.cost.currency ||
+    candidate.agent.cost.currency.toUpperCase() === currency.toUpperCase();
+  return (
+    advertisedCost !== null &&
+    missionBudget !== null &&
+    advertisedCost <= missionBudget &&
+    sameCurrency
+  );
+}
+
 export class VirtualsExecutionService {
   readonly maximumJobUsdc: number;
   private readonly pollIntervalMs: number;
@@ -137,15 +170,22 @@ export class VirtualsExecutionService {
   }
 
   async preview(
-    mission: Pick<Mission, 'id' | 'objective' | 'budget'>,
+    mission: Pick<Mission, 'id' | 'objective' | 'constraints' | 'budget'>,
     capabilities: readonly string[],
     candidateLimit?: number,
   ): Promise<VirtualsRoutingPreview> {
-    const candidates = await this.source.discoverCandidates({
+    const discovered = await this.source.discoverCandidates({
       missionObjective: mission.objective,
       capabilities,
       ...(candidateLimit ? { limit: candidateLimit } : {}),
     });
+    const requirements = providerInput(mission);
+    const missionBudget = positiveAmount(mission.budget);
+    const candidates = discovered.filter(
+      (candidate) =>
+        withinBudget(candidate, missionBudget, budgetCurrency(mission)) &&
+        analyzeOfferingInputCompatibility(candidate.offeringRequirements, requirements).compatible,
+    );
     if (candidates.length === 0) {
       throw new VirtualsProtocolError(
         'VIRTUALS_NO_OFFERING',
@@ -181,17 +221,10 @@ export class VirtualsExecutionService {
       )
         return false;
       if (excluded.has(agent.id)) return false;
-      if (!agent.cost.amount) return true;
-      const advertisedCost = positiveAmount(agent.cost.amount);
-      const sameCurrency =
-        !request.budgetCurrency ||
-        !agent.cost.currency ||
-        agent.cost.currency.toUpperCase() === request.budgetCurrency.toUpperCase();
       return (
-        advertisedCost !== null &&
-        missionBudget !== null &&
-        advertisedCost <= missionBudget &&
-        sameCurrency
+        withinBudget(candidate, missionBudget, request.budgetCurrency) &&
+        analyzeOfferingInputCompatibility(candidate.offeringRequirements, request.requirements)
+          .compatible
       );
     });
     if (candidates.length === 0) {

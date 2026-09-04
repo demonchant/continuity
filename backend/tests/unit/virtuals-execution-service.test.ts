@@ -137,6 +137,115 @@ describe('VirtualsExecutionService', () => {
     expect(provider.checkpoints).toEqual([]);
   });
 
+  it('previews only offerings whose schema and price satisfy the persisted mission', async () => {
+    const source = new MockVirtualsSource([]);
+    const incompatibleCheap = {
+      ...candidate,
+      agent: {
+        ...candidate.agent,
+        id: 'virtuals:8453:0xotto',
+        externalId: '0xotto',
+        name: 'Otto',
+        capabilities: ['crypto-news-research'],
+        cost: { model: 'FIXED' as const, amount: '0.01', currency: 'USDC' },
+      },
+      providerAddress: '0xotto',
+      offeringName: 'topic_research',
+      offeringRequirements: {
+        type: 'object',
+        required: ['primary_search_term', 'raw_full_user_request', 'initiate_filtered_news_job'],
+        properties: {
+          primary_search_term: { type: 'string' },
+          raw_full_user_request: { type: 'string' },
+          initiate_filtered_news_job: { type: 'boolean' },
+        },
+      },
+    };
+    const compatible = {
+      ...candidate,
+      agent: {
+        ...candidate.agent,
+        id: 'virtuals:8453:0xzizi',
+        externalId: '0xzizi',
+        name: 'ZIZI',
+        capabilities: ['crypto-news-research'],
+        cost: { model: 'FIXED' as const, amount: '0.02', currency: 'USDC' },
+      },
+      providerAddress: '0xzizi',
+      offeringName: 'crypto_news_brief',
+      offeringRequirements: {
+        type: 'object',
+        required: ['topic'],
+        properties: {
+          topic: { type: 'string', minLength: 2 },
+          timeframe: { type: 'string', enum: ['24h', '7d'] },
+          focus: { type: 'string', enum: ['analysis', 'general'] },
+        },
+        additionalProperties: false,
+      },
+    };
+    const overBudget = {
+      ...compatible,
+      agent: {
+        ...compatible.agent,
+        id: 'virtuals:8453:0xexpensive',
+        externalId: '0xexpensive',
+        name: 'Expensive',
+        cost: { model: 'FIXED' as const, amount: '5', currency: 'USDC' },
+      },
+      providerAddress: '0xexpensive',
+    };
+    source.discoverCandidates.mockResolvedValue([incompatibleCheap, compatible, overBudget]);
+    const { service } = setup(source);
+
+    const result = await service.preview(
+      {
+        ...mission,
+        budget: '0.10',
+        constraints: {
+          capabilities: ['crypto-news-research'],
+          acpRequirements: {
+            topic: 'AI agent payments on Base',
+            timeframe: '24h',
+            focus: 'analysis',
+          },
+        },
+      },
+      ['crypto-news-research'],
+      5,
+    );
+
+    expect(result.candidates.map(({ offeringName }) => offeringName)).toEqual([
+      'crypto_news_brief',
+    ]);
+    expect(result.decision.selectedAgent.name).toBe('ZIZI');
+  });
+
+  it('never creates a job when provider input violates every offering schema', async () => {
+    const source = new MockVirtualsSource([]);
+    source.discoverCandidates.mockResolvedValue([
+      {
+        ...candidate,
+        offeringRequirements: {
+          type: 'object',
+          required: ['primary_search_term'],
+          properties: { primary_search_term: { type: 'string' } },
+        },
+      },
+    ]);
+    const { service } = setup(source);
+
+    await expect(
+      service.execute({
+        mission,
+        actionId: 'invalid-provider-input',
+        capabilities: ['research'],
+        requirements: { topic: 'AI agent payments on Base' },
+      }),
+    ).rejects.toMatchObject({ code: 'VIRTUALS_NO_OFFERING' });
+    expect(source.createJob).not.toHaveBeenCalled();
+  });
+
   it('pauses at the durable proposal and never funds without exact operator approval', async () => {
     const source = new MockVirtualsSource([
       {
